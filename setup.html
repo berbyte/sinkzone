@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SinkZone - Setup Wizard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', 'Monaco', 'Menlo', 'Consolas', 'Liberation Mono', 'DejaVu Sans Mono', 'Bitstream Vera Sans Mono', monospace;
+            background: #0f0f0f;
+            color: #ffffff;
+            line-height: 1.6;
+            overflow-x: hidden;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, #1a1a1a 0%, #0f0f0f 100%);
+            border-bottom: 1px solid #2a2a2a;
+            padding: 20px 0;
+            min-height: 80px;
+            display: flex;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            -webkit-backdrop-filter: blur(10px);
+            backdrop-filter: blur(10px);
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: 700;
+            font-family: 'Courier New', 'Monaco', 'Menlo', 'Consolas', monospace;
+            background: linear-gradient(135deg, #00ff88, #00cc66);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .setup-progress {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .progress-text {
+            font-size: 14px;
+            color: #888;
+            font-family: 'Courier New', 'Monaco', 'Menlo', 'Consolas', monospace;
+        }
+
+        .config-btn {
+            background: transparent;
+            border: 1px solid #2a2a2a;
+            color: #888;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            font-family: 'Courier New', 'Monaco', 'Menlo', 'Consolas', monospace;
+        }
+
+        .config-btn:hover {
+            border-color: #00ff88;
+            color: #00ff88;
+        }
+
+        /* Main Content */
+        .main {
+            flex: 1;
+            padding: 40px 0;
+        }
+
+        /* Setup Wizard */
+        .setup-wizard {
+            background: linear-gradient(135deg, #1a1a1a 0%, #0f0f0f 100%);
+            border: 1px solid #2a2a2a;
+            border-radius: 12px;
+            padding: 40px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .setup-wizard::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, #00ff88, #00cc66, #00aa44);
+        }
+
+        .step {
+            display: none;
+        }
+
+        .step.active {
+            display: block;
+        }
+
+        .step-header {
+            margin-bottom: 30px;
+        }
+
+        .step-title {
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            font-family: 'Courier New', 'Monaco', 'Menlo', 'Consolas', monospace;
+        }
+
+        .step-description {
+            color: #888;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        .step-number {
+            color: #00ff88;
+            font-weight: 600;
+        }
+
+        /* DNS Provider Selection */
+        .dns-providers {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .provider-option {
+            background: #0f0f0f;
+            border: 1px solid #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+
+        .provider-option:hover {
+            border-color: #00ff88;
+            background: #1f1f1f;
+        }
+
+        .provider-option.selected {
+            border-color: #00ff88;
+            background: #1f1f1f;
+        }
+
+        .provider-logo {
+            width: 48px;
+            height: 48px;
+            margin: 0 auto 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .provider-name {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .provider-desc {
+            color: #888;
+            font-size: 12px;
+        }
+
+        .custom-dns {
+            background: #0f0f0f;
+            border: 1px solid #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+
+        .form-label {
+            font-size: 14px;
+            font-weight: 500;
+            color: #888;
+        }
+
+        .form-input {
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-radius: 6px;
+            padding: 12px;
+            color: #ffffff;
+            font-family: 'Courier New', 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 14px;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #00ff88;
+        }
+
+        /* OS Selection */
+        .os-selector {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .os-option {
+            background: #0f0f0f;
+            border: 1px solid #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+
+        .os-option:hover {
+            border-color: #00ff88;
+            background: #1f1f1f;
+        }
+
+        .os-option.selected {
+            border-color: #00ff88;
+            background: #1f1f1f;
+        }
+
+        .os-logo {
+            width: 48px;
+            height: 48px;
+            margin: 0 auto 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .os-name {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .os-version {
+            color: #888;
+            font-size: 12px;
+        }
+
+        /* Instructions */
+        .instructions {
+            background: #0f0f0f;
+            border: 1px solid #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .instructions h4 {
+            color: #00ff88;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+
+        .instructions ol {
+            color: #888;
+            line-height: 1.8;
+            padding-left: 20px;
+        }
+
+        .instructions li {
+            margin-bottom: 8px;
+        }
+
+        .instructions strong {
+            color: #ffffff;
+        }
+
+        /* Test Connection */
+        .test-section {
+            background: #0f0f0f;
+            border: 1px solid #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .test-result {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 6px;
+            font-weight: 500;
+        }
+
+        .test-result.success {
+            background: rgba(0, 255, 136, 0.1);
+            border: 1px solid #00ff88;
+            color: #00ff88;
+        }
+
+        .test-result.error {
+            background: rgba(255, 68, 68, 0.1);
+            border: 1px solid #ff4444;
+            color: #ff4444;
+        }
+
+        /* Buttons */
+        .btn {
+            background: linear-gradient(135deg, #00ff88, #00cc66);
+            border: none;
+            color: #000;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            font-family: 'Courier New', 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 14px;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 255, 136, 0.3);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            border: 1px solid #2a2a2a;
+            color: #888;
+        }
+
+        .btn-secondary:hover {
+            border-color: #00ff88;
+            color: #00ff88;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn:disabled:hover {
+            transform: none;
+            box-shadow: none;
+        }
+
+        .button-group {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 40px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .setup-wizard {
+                padding: 20px;
+            }
+
+            .dns-providers,
+            .os-selector {
+                grid-template-columns: 1fr;
+            }
+
+            .button-group {
+                flex-direction: column;
+                gap: 15px;
+            }
+        }
+
+        /* Sticky Footer */
+        .footer {
+            background: linear-gradient(135deg, #1a1a1a 0%, #0f0f0f 100%);
+            border-top: 1px solid #2a2a2a;
+            padding: 30px 0;
+            margin-top: auto;
+            text-align: center;
+        }
+
+        .footer-content {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .footer-text {
+            color: #888;
+            font-size: 14px;
+            font-family: 'Courier New', 'Monaco', 'Menlo', 'Consolas', monospace;
+        }
+
+        .footer-link {
+            color: #00ff88;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .footer-link:hover {
+            color: #ffffff;
+            text-shadow: 0 0 8px rgba(0, 255, 136, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="header-left">
+                    <div class="logo">SinkZone</div>
+                    <div class="setup-progress">
+                        <span class="progress-text">Setup: <span id="current-step">1</span> of 3</span>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <button class="config-btn" onclick="window.location.href='index.html'">Dashboard</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="main">
+        <div class="container">
+            <div class="setup-wizard">
+                <!-- Step 1: DNS Provider -->
+                <div class="step active" id="step-1">
+                    <div class="step-header">
+                        <h2 class="step-title"><span class="step-number">Step 1:</span> Choose DNS Provider</h2>
+                        <p class="step-description">Select your upstream DNS resolver. This is where SinkZone will forward queries for domains that aren't blocked.</p>
+                    </div>
+
+                    <div class="dns-providers">
+                        <div class="provider-option" data-provider="google">
+                            <div class="provider-logo">G</div>
+                            <div class="provider-name">Google DNS</div>
+                            <div class="provider-desc">8.8.8.8 / 8.8.4.4</div>
+                        </div>
+                        <div class="provider-option" data-provider="cloudflare">
+                            <div class="provider-logo">C</div>
+                            <div class="provider-name">Cloudflare</div>
+                            <div class="provider-desc">1.1.1.1 / 1.0.0.1</div>
+                        </div>
+                        <div class="provider-option" data-provider="dns0">
+                            <div class="provider-logo">D</div>
+                            <div class="provider-name">DNS0</div>
+                            <div class="provider-desc">0.0.0.0 / 0.0.0.0</div>
+                        </div>
+                        <div class="provider-option" data-provider="quad9">
+                            <div class="provider-logo">Q</div>
+                            <div class="provider-name">Quad9</div>
+                            <div class="provider-desc">9.9.9.9 / 149.112.112.112</div>
+                        </div>
+                        <div class="provider-option" data-provider="custom">
+                            <div class="provider-logo">⚙</div>
+                            <div class="provider-name">Custom</div>
+                            <div class="provider-desc">Use your own DNS servers</div>
+                        </div>
+                    </div>
+
+                    <div class="custom-dns" id="custom-dns" style="display: none;">
+                        <h4 style="color: #00ff88; margin-bottom: 15px;">Custom DNS Configuration</h4>
+                        <div class="form-group">
+                            <label class="form-label">Primary DNS Server</label>
+                            <input type="text" class="form-input" placeholder="e.g., 8.8.8.8">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Secondary DNS Server (Optional)</label>
+                            <input type="text" class="form-input" placeholder="e.g., 8.8.4.4">
+                        </div>
+                    </div>
+
+                    <div class="button-group">
+                        <div></div>
+                        <button class="btn" onclick="nextStep()">Next: Configure OS</button>
+                    </div>
+                </div>
+
+                <!-- Step 2: OS Configuration -->
+                <div class="step" id="step-2">
+                    <div class="step-header">
+                        <h2 class="step-title"><span class="step-number">Step 2:</span> Configure Your Operating System</h2>
+                        <p class="step-description">Select your operating system and follow the instructions to configure SinkZone as your DNS resolver.</p>
+                    </div>
+
+                    <div class="os-selector">
+                        <div class="os-option" data-os="macos">
+                            <div class="os-logo">🍎</div>
+                            <div class="os-name">macOS</div>
+                            <div class="os-version">10.14+</div>
+                        </div>
+                        <div class="os-option" data-os="windows">
+                            <div class="os-logo">🪟</div>
+                            <div class="os-name">Windows</div>
+                            <div class="os-version">10 / 11</div>
+                        </div>
+                        <div class="os-option" data-os="linux">
+                            <div class="os-logo">🐧</div>
+                            <div class="os-name">Linux</div>
+                            <div class="os-version">Ubuntu / Debian</div>
+                        </div>
+                    </div>
+
+                    <div class="instructions" id="instructions" style="display: none;">
+                        <h4 id="instruction-title">macOS Configuration</h4>
+                        <ol id="instruction-list">
+                            <li><strong>Open System Preferences</strong> from the Apple menu</li>
+                            <li><strong>Click Network</strong> in the System Preferences window</li>
+                            <li><strong>Select your active connection</strong> (Wi-Fi or Ethernet)</li>
+                            <li><strong>Click Advanced</strong> in the bottom right</li>
+                            <li><strong>Go to the DNS tab</strong></li>
+                            <li><strong>Click the + button</strong> and add <code>127.0.0.1</code></li>
+                            <li><strong>Move it to the top</strong> of the DNS servers list</li>
+                            <li><strong>Click OK</strong> and then <strong>Apply</strong></li>
+                        </ol>
+                    </div>
+
+                    <div class="test-section">
+                        <h4 style="color: #00ff88; margin-bottom: 15px;">Test Your Configuration</h4>
+                        <p style="color: #888; margin-bottom: 20px;">After following the instructions above, click the button below to verify your setup is working correctly.</p>
+                        <button class="btn" onclick="testConnection()">Test DNS Connection</button>
+                        <div id="test-result" class="test-result" style="display: none;"></div>
+                    </div>
+
+                    <div class="button-group">
+                        <button class="btn btn-secondary" onclick="prevStep()">Back</button>
+                        <button class="btn" id="next-btn" onclick="nextStep()" disabled>Next: Security Settings</button>
+                    </div>
+                </div>
+
+                <!-- Step 3: Security Settings -->
+                <div class="step" id="step-3">
+                    <div class="step-header">
+                        <h2 class="step-title"><span class="step-number">Step 3:</span> Security Settings (Optional)</h2>
+                        <p class="step-description">Configure password protection and lockdown mode to prevent unauthorized access to SinkZone settings.</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Admin Password</label>
+                        <input type="password" class="form-input" placeholder="Leave empty for no password protection">
+                        <small style="color: #888; font-size: 12px;">This will protect access to SinkZone settings</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Lockdown Mode</label>
+                        <div style="display: flex; align-items: center; gap: 10px; margin-top: 8px;">
+                            <input type="checkbox" id="lockdown-mode" style="width: 18px; height: 18px;">
+                            <span style="font-size: 14px; color: #888;">Prevent disabling SinkZone during focus periods</span>
+                        </div>
+                        <small style="color: #888; font-size: 12px;">Useful for self-control or child safety</small>
+                    </div>
+
+                    <div class="button-group">
+                        <button class="btn btn-secondary" onclick="prevStep()">Back</button>
+                        <button class="btn" onclick="completeSetup()">Complete Setup</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <span class="footer-text">© 2023 SinkZone. All rights reserved.</span>
+                <a href="https://example.com" class="footer-link">Privacy Policy</a>
+                <a href="https://example.com" class="footer-link">Terms of Service</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        let currentStep = 1;
+        let selectedProvider = null;
+        let selectedOS = null;
+        let testPassed = false;
+
+        // DNS Provider selection
+        document.querySelectorAll('.provider-option').forEach(option => {
+            option.addEventListener('click', function() {
+                document.querySelectorAll('.provider-option').forEach(opt => opt.classList.remove('selected'));
+                this.classList.add('selected');
+                selectedProvider = this.dataset.provider;
+
+                // Show/hide custom DNS form
+                const customForm = document.getElementById('custom-dns');
+                if (selectedProvider === 'custom') {
+                    customForm.style.display = 'block';
+                } else {
+                    customForm.style.display = 'none';
+                }
+            });
+        });
+
+        // OS selection
+        document.querySelectorAll('.os-option').forEach(option => {
+            option.addEventListener('click', function() {
+                document.querySelectorAll('.os-option').forEach(opt => opt.classList.remove('selected'));
+                this.classList.add('selected');
+                selectedOS = this.dataset.os;
+                showInstructions(selectedOS);
+            });
+        });
+
+        function showInstructions(os) {
+            const instructions = document.getElementById('instructions');
+            const title = document.getElementById('instruction-title');
+            const list = document.getElementById('instruction-list');
+
+            instructions.style.display = 'block';
+
+            const instructionsData = {
+                macos: {
+                    title: 'macOS Configuration',
+                    steps: [
+                        'Open System Preferences from the Apple menu',
+                        'Click Network in the System Preferences window',
+                        'Select your active connection (Wi-Fi or Ethernet)',
+                        'Click Advanced in the bottom right',
+                        'Go to the DNS tab',
+                        'Click the + button and add 127.0.0.1',
+                        'Move it to the top of the DNS servers list',
+                        'Click OK and then Apply'
+                    ]
+                },
+                windows: {
+                    title: 'Windows Configuration',
+                    steps: [
+                        'Open Network & Internet settings',
+                        'Click on Change adapter options',
+                        'Right-click your active connection and select Properties',
+                        'Select Internet Protocol Version 4 (TCP/IPv4)',
+                        'Click Properties',
+                        'Select "Use the following DNS server addresses"',
+                        'Enter 127.0.0.1 as Preferred DNS server',
+                        'Click OK to save changes'
+                    ]
+                },
+                linux: {
+                    title: 'Linux Configuration',
+                    steps: [
+                        'Open Network settings or edit /etc/resolv.conf',
+                        'For NetworkManager: nm-connection-editor',
+                        'Select your connection and go to IPv4 Settings',
+                        'Change Method to "Automatic (DHCP) addresses only"',
+                        'Add 127.0.0.1 to DNS servers',
+                        'Click Save and restart networking',
+                        'Or edit /etc/resolv.conf: nameserver 127.0.0.1',
+                        'Make it persistent: echo "nameserver 127.0.0.1" > /etc/resolv.conf'
+                    ]
+                }
+            };
+
+            const data = instructionsData[os];
+            title.textContent = data.title;
+            list.innerHTML = data.steps.map(step => `<li><strong>${step}</strong></li>`).join('');
+        }
+
+        function testConnection() {
+            const result = document.getElementById('test-result');
+            const nextBtn = document.getElementById('next-btn');
+
+            // Simulate testing
+            result.style.display = 'block';
+            result.textContent = 'Testing DNS connection...';
+            result.className = 'test-result';
+
+            setTimeout(() => {
+                // Simulate success (in real app, this would check actual DNS)
+                result.textContent = '✓ DNS queries are being intercepted successfully!';
+                result.className = 'test-result success';
+                testPassed = true;
+                nextBtn.disabled = false;
+            }, 2000);
+        }
+
+        function nextStep() {
+            if (currentStep === 1 && !selectedProvider) {
+                alert('Please select a DNS provider');
+                return;
+            }
+
+            if (currentStep === 2 && !selectedOS) {
+                alert('Please select your operating system');
+                return;
+            }
+
+            if (currentStep === 2 && !testPassed) {
+                alert('Please test your DNS connection first');
+                return;
+            }
+
+            document.getElementById(`step-${currentStep}`).classList.remove('active');
+            currentStep++;
+            document.getElementById(`step-${currentStep}`).classList.add('active');
+            document.getElementById('current-step').textContent = currentStep;
+
+            if (currentStep === 3) {
+                document.getElementById('next-btn').style.display = 'none';
+            }
+        }
+
+        function prevStep() {
+            document.getElementById(`step-${currentStep}`).classList.remove('active');
+            currentStep--;
+            document.getElementById(`step-${currentStep}`).classList.add('active');
+            document.getElementById('current-step').textContent = currentStep;
+
+            if (currentStep === 2) {
+                document.getElementById('next-btn').style.display = 'inline-block';
+            }
+        }
+
+        function completeSetup() {
+            // Save configuration and redirect to main dashboard
+            alert('Setup completed! Redirecting to dashboard...');
+            window.location.href = 'index.html';
+        }
+    </script>
+</body>
+</html>
