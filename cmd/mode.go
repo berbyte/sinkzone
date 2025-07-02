@@ -7,9 +7,26 @@ import (
 	"strings"
 
 	"github.com/berbyte/sinkzone/config"
+	"github.com/berbyte/sinkzone/database"
 
 	"github.com/spf13/cobra"
 )
+
+// checkLockdownMode prevents mode switching when in lockdown mode
+func checkLockdownMode(db *database.DB) error {
+	currentMode, err := db.GetMode()
+	if err != nil {
+		return fmt.Errorf("failed to get current mode: %v", err)
+	}
+
+	if currentMode == "lockdown" {
+		fmt.Println("❌ Cannot switch modes while in Lockdown Mode")
+		fmt.Println("💡 Use 'sinkzone mode unlock' to exit Lockdown Mode first")
+		return fmt.Errorf("unlock required")
+	}
+
+	return nil
+}
 
 var modeCmd = &cobra.Command{
 	Use:   "mode",
@@ -23,6 +40,11 @@ var modeFocusCmd = &cobra.Command{
 	Long:  "Enable Focus Mode - blocks social media and entertainment sites",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		db := getDB()
+
+		if err := checkLockdownMode(db); err != nil {
+			return err
+		}
+
 		if err := db.SetMode("focus"); err != nil {
 			return fmt.Errorf("failed to set mode: %v", err)
 		}
@@ -76,6 +98,11 @@ var modeMonitorCmd = &cobra.Command{
 	Long:  "Enable Monitor Mode - logs all queries but doesn't block anything",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		db := getDB()
+
+		if err := checkLockdownMode(db); err != nil {
+			return err
+		}
+
 		if err := db.SetMode("monitor"); err != nil {
 			return fmt.Errorf("failed to set mode: %v", err)
 		}
@@ -91,6 +118,11 @@ var modeOffCmd = &cobra.Command{
 	Long:  "Disable all filtering - acts as a simple DNS forwarder",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		db := getDB()
+
+		if err := checkLockdownMode(db); err != nil {
+			return err
+		}
+
 		if err := db.SetMode("off"); err != nil {
 			return fmt.Errorf("failed to set mode: %v", err)
 		}
@@ -120,9 +152,9 @@ var modeStatusCmd = &cobra.Command{
 		case "monitor":
 			fmt.Println("Status: Logging all queries (no blocking)")
 		case "focus":
-			fmt.Println("Status: Blocking distracting sites")
+			fmt.Println("Status: Focus Mode")
 		case "lockdown":
-			fmt.Println("Status: Blocking most sites (PIN protected)")
+			fmt.Println("Status: Lockdown Mode")
 		default:
 			fmt.Println("Status: Unknown mode")
 		}

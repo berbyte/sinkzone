@@ -34,7 +34,6 @@ func NewServer(upstream string, db *database.DB) *Server {
 		db:       db,
 		filter:   filter.New(),
 	}
-
 	return &Server{
 		upstream: upstream,
 		db:       db,
