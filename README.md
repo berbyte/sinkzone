@@ -1,84 +1,136 @@
-# Sinkzone DNS Forwarder
+# Sinkzone 🛑
 
-A simple DNS forwarder written in Go that listens on port 53 and forwards all DNS requests to Google's DNS server (8.8.8.8) while logging all domain queries to stdout.
+A strict DNS filter to help you stay focused — or keep your kids safe.
 
-## Features
+Sinkzone is a **local DNS forwarder** that lets you block distractions at the network level. It's built for developers and parents who want more control than browser extensions or `/etc/hosts` can provide.
 
-- Listens on port 53 (UDP)
-- Forwards all DNS requests to 8.8.8.8
-- Logs all domain queries to stdout
-- Simple and lightweight
+## ✨ Why Sinkzone?
 
-## Requirements
+I built Sinkzone for myself. I wanted to:
 
-- Go 1.21 or later
-- Root privileges (required to bind to port 53)
+- Cut off **distractions** when I write code.
+- Give my son safe, whitelisted access to chess.com and Zoom for coaching.
+- Actually **enforce lockdown**, even from myself.
 
-## Installation
+Most tools don’t go far enough. Sinkzone does.
 
-1. Clone or download this repository
-2. Install dependencies:
-   ```bash
-   go mod tidy
-   ```
+---
 
-## Building
+## 🧠 How it works
 
-```bash
-go build -o dns-forwarder main.go
-```
+- Run a **local DNS server** with a personal allow/block list.
+- Use `focus` mode to block known distractions.
+- Use `lockdown` mode to enforce rules with a PIN only someone else knows.
+- Use `monitor` mode to just log DNS queries without blocking.
+- Simple SQLite-based config — no cloud, no accounts.
 
-## Running
+---
 
-**Important**: This program must be run with root privileges to bind to port 53.
+## 🔧 Usage
 
 ```bash
-sudo ./dns-forwarder
-```
+sinkzone dns start            # Start DNS filter (requires root)
+sinkzone web                  # Open dashboard UI
+sinkzone mode focus           # Start blocking distractions
+sinkzone mode lockdown        # PIN-protected lockdown
+sinkzone mode monitor         # Just watch, don't block
+sinkzone mode off             # Disable all filtering
+````
 
-Or run directly with Go:
-
-```bash
-sudo go run main.go
-```
-
-## Usage
-
-Once running, the DNS forwarder will:
-
-1. Start listening on port 53
-2. Forward all incoming DNS requests to 8.8.8.8
-3. Log all domain queries to stdout
-
-Example output:
-```
-Starting DNS forwarder on port 53
-Forwarding requests to: 8.8.8.8:53
-Logging all domain queries to stdout
-Press Ctrl+C to stop
-DNS Query: google.com (Type: A)
-DNS Query: example.com (Type: AAAA)
-```
-
-## Configuration
-
-You can modify the following constants in `main.go`:
-
-- `upstreamDNS`: The DNS server to forward requests to (default: 8.8.8.8:53)
-- `localPort`: The local port to listen on (default: :53)
-
-## Testing
-
-To test the DNS forwarder, you can use tools like `dig` or `nslookup`:
+You can also:
 
 ```bash
-# Test with dig
-dig @127.0.0.1 google.com
-
-# Test with nslookup
-nslookup google.com 127.0.0.1
+sinkzone allow example.com    # Add to allowlist
+sinkzone block twitter.com    # Add to blocklist
+sinkzone list                 # View all rules
 ```
 
-## Security Note
+---
 
-Running a DNS server requires root privileges and should be done carefully. This is a basic implementation and may need additional security measures for production use. 
+## 🛠 Installation
+
+### macOS (with Homebrew)
+
+```bash
+brew install sinkzone
+```
+
+### Linux
+
+```bash
+curl -sSL https://sinkzone.ber.run/install.sh | sudo bash
+```
+
+Or build from source:
+
+```bash
+go install github.com/berbyte/sinkzone@latest
+```
+
+### Docker
+
+```bash
+docker run --net=host berbyte/sinkzone dns
+```
+
+---
+
+## 🌐 UI Preview
+
+> Lightweight web UI lets you switch modes and manage rules.
+
+
+---
+
+## 🧪 Status
+
+This is an MVP — alpha-quality. Expect bugs. I built it for myself, and it works for my use cases.
+
+✅ Works on macOS, Windows and Linux
+✅ Runs in Docker or Raspberry Pi
+✅ Open-source and auditable
+📦 Single static binary (no runtime deps)
+
+---
+
+## 📁 Configuration
+
+Sinkzone stores all data locally in `~/.sinkzone/`:
+
+- `~/.sinkzone/config.toml` - Configuration file
+- `~/.sinkzone/sinkzone.db` - SQLite database
+
+Default configuration:
+```toml
+upstream_dns = "8.8.8.8:53"
+pin = "a94a8fe5ccb19ba61c4c0873d391e987982fbbd3"  # SHA1 hash of "1234"
+```
+
+## 🛡️ Security
+
+Sinkzone runs a DNS server on your machine. It needs elevated privileges to bind port 53. Run it on a separate device (like a Raspberry Pi) if you're worried — or run in Docker.
+
+You can also set up Sinkzone on a VPS and route all traffic through it.
+
+---
+
+## 🤖 Roadmap
+
+* Time-based rules (e.g., focus from 9am–12pm)
+* Per-device control
+* Automatic domain categorization
+* Shared blocklists
+* Enforced lockdown from remote parent UI
+
+---
+
+## 📜 License
+
+MIT. Built for hackers, parents, and ADHD coders.
+
+---
+
+
+## 👋 Contribute
+
+Pull requests welcome. File issues, suggest ideas, or just star the repo if you like it.
