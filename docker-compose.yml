@@ -16,19 +16,3 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-
-  # Development service with hot reload (optional)
-  sinkzone-dev:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    container_name: sinkzone-dev
-    network_mode: host
-    volumes:
-      - .:/app
-      - ~/.sinkzone:/home/sinkzone/.sinkzone
-    environment:
-      - TZ=UTC
-    restart: unless-stopped
-    profiles:
-      - dev 
