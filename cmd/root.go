@@ -1,57 +1,29 @@
 package cmd
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
-
-	"github.com/berbyte/sinkzone/config"
-	"github.com/berbyte/sinkzone/database"
-
+	"github.com/berbyte/sinkzone/internal/tui"
 	"github.com/spf13/cobra"
-)
-
-var (
-	cfg *config.Config
-	db  *database.DB
 )
 
 var rootCmd = &cobra.Command{
 	Use:   "sinkzone",
-	Short: "Sinkzone - DNS filtering and focus tool",
-	Long: `Sinkzone is a DNS filtering tool that helps you stay focused by blocking distracting websites.
-It supports multiple modes: monitor, focus, lockdown, and off.`,
+	Short: "A productivity tool for DNS-based focus mode",
+	Long: `Sinkzone is a lightweight DNS resolver that helps you stay focused
+by blocking distracting websites during focus sessions.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// If no subcommand is provided, start the TUI
+		return tui.Start()
+	},
 }
 
-func Execute() {
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
+// Execute adds all child commands to the root command and sets flags appropriately.
+func Execute() error {
+	return rootCmd.Execute()
 }
 
 func init() {
-	// Load configuration
-	var err error
-	cfg, err = config.LoadConfig()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Initialize database
-	dbPath := filepath.Join(config.GetConfigDir(), "sinkzone.db")
-	db, err = database.OpenDB(dbPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error opening database: %v\n", err)
-		os.Exit(1)
-	}
-}
-
-func getConfig() *config.Config {
-	return cfg
-}
-
-func getDB() *database.DB {
-	return db
+	// Add subcommands
+	rootCmd.AddCommand(resolverCmd)
+	rootCmd.AddCommand(focusCmd)
+	rootCmd.AddCommand(helpCmd)
 }
