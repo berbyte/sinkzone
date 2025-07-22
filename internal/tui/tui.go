@@ -50,6 +50,14 @@ type Model struct {
 	allowlist   []string
 }
 
+// Cleanup function to restore terminal
+func (m Model) cleanup() {
+	// Restore terminal state
+	fmt.Print("\033[?25h") // Show cursor
+	fmt.Print("\033[2J")   // Clear screen
+	fmt.Print("\033[H")    // Move cursor to top
+}
+
 // Style definitions
 var (
 	// Colors
@@ -109,6 +117,20 @@ var (
 type tickMsg time.Time
 
 func Start() error {
+	// Restore terminal state before starting
+	checkAndRestoreTerminal()
+
+	// Ensure terminal is restored on exit
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("Recovered from panic: %v\n", r)
+		}
+		// Force terminal restoration
+		fmt.Print("\033[?25h") // Show cursor
+		fmt.Print("\033[2J")   // Clear screen
+		fmt.Print("\033[H")    // Move cursor to top
+	}()
+
 	// Split banner into lines for animation
 	bannerLines := strings.Split(strings.TrimSpace(sinkzoneBanner), "\n")
 
@@ -120,7 +142,9 @@ func Start() error {
 	dbPath := filepath.Join(homeDir, ".sinkzone", "sinkzone.db")
 	db, err := database.New(dbPath)
 	if err != nil {
-		return fmt.Errorf("failed to initialize database: %w", err)
+		// Continue without database if it fails to initialize
+		fmt.Printf("Warning: failed to initialize database: %v\n", err)
+		db = nil
 	}
 
 	m := Model{
@@ -141,12 +165,31 @@ func Start() error {
 		allowlist:     []string{},
 	}
 
-	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	// Create program with improved terminal handling
+	p := tea.NewProgram(
+		m,
+		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(),
+		tea.WithInput(os.Stdin),
+		tea.WithOutput(os.Stderr),
+	)
+
+	// Run the program with error handling
 	if _, err := p.Run(); err != nil {
+		// Ensure terminal is restored even on error
+		fmt.Print("\033[?25h\033[2J\033[H")
 		return fmt.Errorf("failed to run TUI: %w", err)
 	}
 
 	return nil
+}
+
+// checkAndRestoreTerminal ensures the terminal is in a proper state
+func checkAndRestoreTerminal() {
+	// Check if terminal is in a bad state and restore it
+	fmt.Print("\033[?25h") // Show cursor
+	fmt.Print("\033[2J")   // Clear screen
+	fmt.Print("\033[H")    // Move cursor to top
 }
 
 func (m Model) Init() tea.Cmd {
@@ -197,7 +240,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.lastRefresh = time.Now()
 
 				// Load allowlist
-
 				allowlist, err := m.db.GetAllowlist()
 				if err == nil {
 					m.allowlist = allowlist
@@ -211,6 +253,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "q", "ctrl+c":
 			m.quitting = true
+			// Cleanup terminal before quitting
+			m.cleanup()
 			return m, tea.Quit
 		case "1":
 			if len(m.tabs) > 0 {
@@ -260,7 +304,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	}
-
 	return m, nil
 }
 
