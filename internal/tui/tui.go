@@ -46,8 +46,9 @@ type Model struct {
 	lastRefresh time.Time // Track when we last refreshed to only show new records
 
 	// Table scrolling
-	tableCursor int
-	allowlist   []string
+	tableCursor  int
+	scrollOffset int // Track the start of the visible window
+	allowlist    []string
 }
 
 // Cleanup function to restore terminal
@@ -162,6 +163,7 @@ func Start() error {
 		lastUpdate:    time.Now(),
 		lastRefresh:   time.Now(), // Initialize lastRefresh
 		tableCursor:   0,
+		scrollOffset:  0, // Initialize scrollOffset
 		allowlist:     []string{},
 	}
 
@@ -259,6 +261,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "1":
 			if len(m.tabs) > 0 {
 				m.activeTab = 0
+				// Reset scroll offset when switching to monitoring tab
+				m.scrollOffset = 0
 			}
 		case "2":
 			if len(m.tabs) > 1 {
@@ -275,10 +279,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "up", "k":
 			if m.activeTab == 0 && len(m.dnsQueries) > 0 {
 				m.tableCursor = max(m.tableCursor-1, 0)
+				// Adjust scroll offset if cursor moved above visible window
+				if m.tableCursor < m.scrollOffset {
+					m.scrollOffset = m.tableCursor
+				}
 			}
 		case "down", "j":
 			if m.activeTab == 0 && len(m.dnsQueries) > 0 {
 				m.tableCursor = min(m.tableCursor+1, len(m.dnsQueries)-1)
+				// Calculate available height for table
+				availableHeight := m.height - 10 // Reserve space for header, footer, and padding
+				if availableHeight < 1 {
+					availableHeight = 1
+				}
+				// Adjust scroll offset if cursor moved below visible window
+				if m.tableCursor >= m.scrollOffset+availableHeight {
+					m.scrollOffset = m.tableCursor - availableHeight + 1
+				}
 			}
 		case "a":
 			if m.activeTab == 0 && len(m.dnsQueries) > 0 && m.tableCursor < len(m.dnsQueries) {
@@ -331,44 +348,57 @@ func (m Model) View() string {
 		m.activeTab = 0
 	}
 
-	// Calculate layout dimensions - adjust for proper spacing
-	headerHeight := lipgloss.Height(headerStyle.Render(sinkzoneBanner))
-	footerHeight := 1                                                       // Simple footer bar
-	tabHeight := 1                                                          // Simple text tabs
-	contentHeight := m.height - headerHeight - footerHeight - tabHeight - 4 // More space for footer
-
-	// Render animated banner
-	var bannerText string
+	// Render header with banner animation
+	bannerText := ""
 	if m.animationDone {
-		// Show full banner when animation is complete
 		bannerText = sinkzoneBanner
 	} else {
-		// Show partial banner during animation
-		visibleLines := m.bannerLines[:m.currentLine+1]
-		bannerText = strings.Join(visibleLines, "\n")
+		// Show animated banner
+		for i := 0; i <= m.currentLine && i < len(m.bannerLines); i++ {
+			bannerText += m.bannerLines[i] + "\n"
+		}
+		// Add empty lines to maintain height during animation
+		for i := len(m.bannerLines) - m.currentLine - 1; i > 0; i-- {
+			bannerText += "\n"
+		}
 	}
 
-	// Header - animated banner with fixed height container
+	// Calculate heights
+	headerHeight := lipgloss.Height(headerStyle.Render(bannerText))
+	tabHeight := 1
+	footerHeight := 1
+
+	// Calculate content height to prevent footer cutoff
+	contentHeight := m.height - headerHeight - tabHeight - footerHeight - 4 // Extra padding
+
+	// Ensure minimum content height
+	if contentHeight < 5 {
+		contentHeight = 5
+	}
+
 	header := headerStyle.Width(m.width).Height(headerHeight).Align(lipgloss.Center).Render(bannerText)
 
-	// Simple tabs - just text, no borders
+	// Render tabs
 	tabs := m.renderTabs()
 
 	// Content area with safety check
 	contentText := "No content available"
 	if m.activeTab < len(m.tabContent) {
-		if m.activeTab == 0 {
-			// Monitoring tab - show DNS table
+		if m.activeTab == 0 { // Monitoring tab
 			contentText = m.renderDNSMonitoring()
 		} else {
 			contentText = m.tabContent[m.activeTab]
 		}
 	}
 
-	content := contentStyle.
-		Width(m.width - 4).
-		Height(contentHeight).
-		Render(contentText)
+	// Truncate content if it's too long
+	contentLines := strings.Split(contentText, "\n")
+	if len(contentLines) > contentHeight {
+		contentLines = contentLines[:contentHeight]
+		contentText = strings.Join(contentLines, "\n")
+	}
+
+	content := contentStyle.Width(m.width - 2).Height(contentHeight).Render(contentText)
 
 	// Footer - pink bar like in screenshot
 	footerText := "q: Quit • h: Help • t: Toggle Focus • 1-3: Switch Tabs • ←/→: Navigate"
@@ -378,16 +408,16 @@ func (m Model) View() string {
 	footer := footerStyle.Width(m.width).Render(footerText)
 
 	// Build the layout vertically
-	layout := lipgloss.JoinVertical(
-		lipgloss.Left,
-		header,
-		tabs,
-		content,
-		footer,
-	)
+	doc := strings.Builder{}
+	doc.WriteString(header)
+	doc.WriteString("\n")
+	doc.WriteString(tabs)
+	doc.WriteString("\n")
+	doc.WriteString(content)
+	doc.WriteString("\n")
+	doc.WriteString(footer)
 
-	// Apply full terminal styling
-	return docStyle.MaxWidth(m.width).MaxHeight(m.height).Render(layout)
+	return docStyle.Width(0).Height(0).Render(doc.String())
 }
 
 func (m Model) renderDNSMonitoring() string {
@@ -395,18 +425,40 @@ func (m Model) renderDNSMonitoring() string {
 		return "No DNS queries recorded yet.\n\nStart the DNS resolver to see real-time data."
 	}
 
+	// Calculate available space for table
+	// Reserve space for: header (1) + separator (1) + summary (1) + some padding
+	availableHeight := m.height - 10 // Reserve space for header, footer, and padding
+
+	// Limit the number of rows to display
+	maxRows := availableHeight
+	if maxRows < 1 {
+		maxRows = 1
+	}
+
+	// Use scroll offset to determine which rows to show
+	startIndex := m.scrollOffset
+	endIndex := startIndex + maxRows
+	if endIndex > len(m.dnsQueries) {
+		endIndex = len(m.dnsQueries)
+		// Adjust start index if we're at the end
+		if endIndex-startIndex < maxRows {
+			startIndex = max(0, endIndex-maxRows)
+		}
+	}
+
 	// Create table header with proper alignment
 	header := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(accent4).
-		Render("Domain                    │ Count │ Last Seen          │ Status")
+		Render("Domain                         │  Count │ Last Seen  │ Status")
 
 	separator := lipgloss.NewStyle().
 		Foreground(muted).
-		Render("────────────────────────────┼───────┼────────────────────┼────────")
+		Render("──────────────────────────────────────────────────────────────")
 
 	var rows []string
-	for i, query := range m.dnsQueries {
+	for i := startIndex; i < endIndex; i++ {
+		query := m.dnsQueries[i]
 		status := "Blocked"                      // Default to blocked
 		statusColor := lipgloss.Color("#FF6B6B") // Red
 		if m.isInAllowlist(query.Domain) {
@@ -414,41 +466,43 @@ func (m Model) renderDNSMonitoring() string {
 			statusColor = accent3 // Green
 		}
 
-		// Check if this is a new record (seen in last 5 seconds)
-		isNew := time.Since(query.Timestamp) < 5*time.Second
-
 		// Add indicator for new records
 		domainText := query.Domain
-		if isNew {
-			domainText = "🆕 " + query.Domain
-		}
 
 		// Format status with color
 		statusText := lipgloss.NewStyle().Foreground(statusColor).Render(status)
 
 		// Use helper function for consistent formatting
-		rowText := formatTableRow(domainText, query.Count, query.Timestamp, statusText, i == m.tableCursor)
+		// Adjust the cursor index for the window
+		isSelected := (i == m.tableCursor)
+		rowText := formatTableRow(domainText, query.Count, query.Timestamp, statusText, isSelected)
 		rows = append(rows, rowText)
 	}
 
 	// Join all rows
 	table := header + "\n" + separator + "\n" + strings.Join(rows, "\n")
 
-	// Add summary
+	// Add summary with scroll indicator
+	scrollInfo := ""
+	if len(m.dnsQueries) > maxRows {
+		scrollInfo = fmt.Sprintf(" | Showing %d-%d of %d", startIndex+1, endIndex, len(m.dnsQueries))
+	}
+
 	summary := lipgloss.NewStyle().
 		Foreground(muted).
-		Render(fmt.Sprintf("\nTotal queries: %d | Last update: %s | 🆕 = New in last 5s",
+		Render(fmt.Sprintf("\nTotal queries: %d | Last update: %s%s",
 			len(m.dnsQueries),
-			m.lastUpdate.Format("15:04:05")))
+			m.lastUpdate.Format("15:04:05"),
+			scrollInfo))
 
 	return table + summary
 }
 
 func formatTableRow(domain string, count int, timestamp time.Time, status string, isSelected bool) string {
 	// Format each column with proper width
-	domainCol := fmt.Sprintf("%-25s", truncateString(domain, 25))
-	countCol := fmt.Sprintf("%5d", count)
-	timeCol := fmt.Sprintf("%-17s", timestamp.Format("15:04:05"))
+	domainCol := fmt.Sprintf("%-30s", truncateString(domain, 25))
+	countCol := fmt.Sprintf("%6d", count)
+	timeCol := fmt.Sprintf("%-10s", timestamp.Format("15:04:05"))
 	statusCol := status
 
 	// Combine columns
