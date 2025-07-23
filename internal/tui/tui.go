@@ -46,9 +46,11 @@ type Model struct {
 	lastRefresh time.Time // Track when we last refreshed to only show new records
 
 	// Table scrolling
-	tableCursor  int
-	scrollOffset int // Track the start of the visible window
-	allowlist    []string
+	tableCursor int
+	allowlist   []string
+
+	// Help state
+	showHelp bool
 }
 
 // Cleanup function to restore terminal
@@ -163,8 +165,8 @@ func Start() error {
 		lastUpdate:    time.Now(),
 		lastRefresh:   time.Now(), // Initialize lastRefresh
 		tableCursor:   0,
-		scrollOffset:  0, // Initialize scrollOffset
 		allowlist:     []string{},
+		showHelp:      false,
 	}
 
 	// Create program with improved terminal handling
@@ -261,8 +263,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "1":
 			if len(m.tabs) > 0 {
 				m.activeTab = 0
-				// Reset scroll offset when switching to monitoring tab
-				m.scrollOffset = 0
+				// Reset cursor when switching to monitoring tab
+				m.tableCursor = 0
 			}
 		case "2":
 			if len(m.tabs) > 1 {
@@ -274,50 +276,95 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "right", "l", "n", "tab":
 			m.activeTab = min(m.activeTab+1, len(m.tabs)-1)
-		case "left", "h", "p", "shift+tab":
+		case "left", "p", "shift+tab":
 			m.activeTab = max(m.activeTab-1, 0)
 		case "up", "k":
 			if m.activeTab == 0 && len(m.dnsQueries) > 0 {
-				m.tableCursor = max(m.tableCursor-1, 0)
-				// Adjust scroll offset if cursor moved above visible window
-				if m.tableCursor < m.scrollOffset {
-					m.scrollOffset = m.tableCursor
-				}
-			}
-		case "down", "j":
-			if m.activeTab == 0 && len(m.dnsQueries) > 0 {
-				m.tableCursor = min(m.tableCursor+1, len(m.dnsQueries)-1)
-				// Calculate available height for table
-				availableHeight := m.height - 10 // Reserve space for header, footer, and padding
+				// Calculate visible range
+				availableHeight := m.height - 12
 				if availableHeight < 1 {
 					availableHeight = 1
 				}
-				// Adjust scroll offset if cursor moved below visible window
-				if m.tableCursor >= m.scrollOffset+availableHeight {
-					m.scrollOffset = m.tableCursor - availableHeight + 1
+				startIndex := 0
+				endIndex := len(m.dnsQueries)
+				if len(m.dnsQueries) > availableHeight {
+					startIndex = len(m.dnsQueries) - availableHeight
+					endIndex = len(m.dnsQueries)
 				}
+
+				// Calculate visible position (0-based index within visible items)
+				visibleIndex := m.tableCursor - startIndex
+				visibleCount := endIndex - startIndex
+
+				// Wrap around within visible range
+				if visibleIndex <= 0 {
+					visibleIndex = visibleCount - 1
+				} else {
+					visibleIndex--
+				}
+
+				// Map back to dataset index
+				m.tableCursor = startIndex + visibleIndex
 			}
-		case "a":
+		case "down", "j":
+			if m.activeTab == 0 && len(m.dnsQueries) > 0 {
+				// Calculate visible range
+				availableHeight := m.height - 12
+				if availableHeight < 1 {
+					availableHeight = 1
+				}
+				startIndex := 0
+				endIndex := len(m.dnsQueries)
+				if len(m.dnsQueries) > availableHeight {
+					startIndex = len(m.dnsQueries) - availableHeight
+					endIndex = len(m.dnsQueries)
+				}
+
+				// Calculate visible position (0-based index within visible items)
+				visibleIndex := m.tableCursor - startIndex
+				visibleCount := endIndex - startIndex
+
+				// Wrap around within visible range
+				if visibleIndex >= visibleCount-1 {
+					visibleIndex = 0
+				} else {
+					visibleIndex++
+				}
+
+				// Map back to dataset index
+				m.tableCursor = startIndex + visibleIndex
+			}
+		case " ", "enter":
 			if m.activeTab == 0 && len(m.dnsQueries) > 0 && m.tableCursor < len(m.dnsQueries) {
-				// Add selected domain to allowlist
+				// Toggle allow/block status for selected domain
 				selectedDomain := m.dnsQueries[m.tableCursor].Domain
-				if !m.isInAllowlist(selectedDomain) {
-					m.allowlist = append(m.allowlist, selectedDomain)
-					// Save to database
+				if m.isInAllowlist(selectedDomain) {
+					// Remove from allowlist
+					m.removeFromAllowlist(selectedDomain)
+					// Remove from database
 					if m.db != nil {
-						m.db.AddToAllowlist(selectedDomain)
+						m.db.RemoveFromAllowlist(selectedDomain)
+					}
+				} else {
+					// Add to allowlist
+					if !m.isInAllowlist(selectedDomain) {
+						m.allowlist = append(m.allowlist, selectedDomain)
+						// Save to database
+						if m.db != nil {
+							m.db.AddToAllowlist(selectedDomain)
+						}
 					}
 				}
 			}
-		case "r":
-			if m.activeTab == 0 && len(m.dnsQueries) > 0 && m.tableCursor < len(m.dnsQueries) {
-				// Remove selected domain from allowlist
-				selectedDomain := m.dnsQueries[m.tableCursor].Domain
-				m.removeFromAllowlist(selectedDomain)
-				// Remove from database
-				if m.db != nil {
-					m.db.RemoveFromAllowlist(selectedDomain)
-				}
+		case "h", "?":
+			if m.activeTab == 0 {
+				// Toggle help display
+				m.showHelp = !m.showHelp
+			}
+		case "esc":
+			if m.activeTab == 0 && m.showHelp {
+				// Exit help and return to monitoring
+				m.showHelp = false
 			}
 		}
 	}
@@ -363,19 +410,20 @@ func (m Model) View() string {
 		}
 	}
 
-	// Calculate heights
-	headerHeight := lipgloss.Height(headerStyle.Render(bannerText))
+	// Calculate consistent heights to prevent jiggling
+	headerHeight := lipgloss.Height(headerStyle.Render(sinkzoneBanner)) // Use full banner height
 	tabHeight := 1
 	footerHeight := 1
 
-	// Calculate content height to prevent footer cutoff
-	contentHeight := m.height - headerHeight - tabHeight - footerHeight - 4 // Extra padding
+	// Calculate content height with consistent padding
+	contentHeight := m.height - headerHeight - tabHeight - footerHeight - 6 // Extra padding for stability
 
 	// Ensure minimum content height
 	if contentHeight < 5 {
 		contentHeight = 5
 	}
 
+	// Always render header with full height to prevent jiggling
 	header := headerStyle.Width(m.width).Height(headerHeight).Align(lipgloss.Center).Render(bannerText)
 
 	// Render tabs
@@ -385,13 +433,17 @@ func (m Model) View() string {
 	contentText := "No content available"
 	if m.activeTab < len(m.tabContent) {
 		if m.activeTab == 0 { // Monitoring tab
-			contentText = m.renderDNSMonitoring()
+			if m.showHelp {
+				contentText = m.renderHelp()
+			} else {
+				contentText = m.renderDNSMonitoring()
+			}
 		} else {
 			contentText = m.tabContent[m.activeTab]
 		}
 	}
 
-	// Truncate content if it's too long
+	// Truncate content if it's too long to prevent layout shifts
 	contentLines := strings.Split(contentText, "\n")
 	if len(contentLines) > contentHeight {
 		contentLines = contentLines[:contentHeight]
@@ -403,11 +455,15 @@ func (m Model) View() string {
 	// Footer - pink bar like in screenshot
 	footerText := "q: Quit • h: Help • t: Toggle Focus • 1-3: Switch Tabs • ←/→: Navigate"
 	if m.activeTab == 0 {
-		footerText = "↑/↓: Navigate • a: Add to allowlist • r: Remove from allowlist • q: Quit"
+		if m.showHelp {
+			footerText = "esc: Exit Help • h: Hide Help"
+		} else {
+			footerText = "↑/↓: Navigate • Space/Enter: Toggle Allow/Block • h: Help • q: Quit"
+		}
 	}
 	footer := footerStyle.Width(m.width).Render(footerText)
 
-	// Build the layout vertically
+	// Build the layout vertically with consistent spacing
 	doc := strings.Builder{}
 	doc.WriteString(header)
 	doc.WriteString("\n")
@@ -427,7 +483,7 @@ func (m Model) renderDNSMonitoring() string {
 
 	// Calculate available space for table
 	// Reserve space for: header (1) + separator (1) + summary (1) + some padding
-	availableHeight := m.height - 10 // Reserve space for header, footer, and padding
+	availableHeight := m.height - 12 // More conservative space reservation
 
 	// Limit the number of rows to display
 	maxRows := availableHeight
@@ -435,22 +491,28 @@ func (m Model) renderDNSMonitoring() string {
 		maxRows = 1
 	}
 
-	// Use scroll offset to determine which rows to show
-	startIndex := m.scrollOffset
-	endIndex := startIndex + maxRows
-	if endIndex > len(m.dnsQueries) {
+	// Just show the most recent items that fit on screen
+	startIndex := 0
+	endIndex := len(m.dnsQueries)
+	if len(m.dnsQueries) > maxRows {
+		// Show the most recent items
+		startIndex = len(m.dnsQueries) - maxRows
 		endIndex = len(m.dnsQueries)
-		// Adjust start index if we're at the end
-		if endIndex-startIndex < maxRows {
-			startIndex = max(0, endIndex-maxRows)
-		}
+	}
+
+	// Adjust cursor to be within the visible range
+	if m.tableCursor < startIndex {
+		m.tableCursor = startIndex
+	}
+	if m.tableCursor >= endIndex {
+		m.tableCursor = endIndex - 1
 	}
 
 	// Create table header with proper alignment
 	header := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(accent4).
-		Render("Domain                         │  Count │ Last Seen  │ Status")
+		Render("Domain                         │  Count │ Last Seen  │ Action")
 
 	separator := lipgloss.NewStyle().
 		Foreground(muted).
@@ -459,10 +521,10 @@ func (m Model) renderDNSMonitoring() string {
 	var rows []string
 	for i := startIndex; i < endIndex; i++ {
 		query := m.dnsQueries[i]
-		status := "Blocked"                      // Default to blocked
+		status := "Block"                        // Default to blocked
 		statusColor := lipgloss.Color("#FF6B6B") // Red
 		if m.isInAllowlist(query.Domain) {
-			status = "Allowed"
+			status = "Allow"
 			statusColor = accent3 // Green
 		}
 
@@ -473,29 +535,78 @@ func (m Model) renderDNSMonitoring() string {
 		statusText := lipgloss.NewStyle().Foreground(statusColor).Render(status)
 
 		// Use helper function for consistent formatting
-		// Adjust the cursor index for the window
+		// The cursor should be highlighted if it matches the current row in the dataset
 		isSelected := (i == m.tableCursor)
 		rowText := formatTableRow(domainText, query.Count, query.Timestamp, statusText, isSelected)
 		rows = append(rows, rowText)
 	}
 
+	// Ensure we always have the same number of lines to prevent layout shifts
+	for len(rows) < maxRows {
+		rows = append(rows, strings.Repeat(" ", 60)) // Empty line with consistent width
+	}
+
 	// Join all rows
 	table := header + "\n" + separator + "\n" + strings.Join(rows, "\n")
 
-	// Add summary with scroll indicator
-	scrollInfo := ""
-	if len(m.dnsQueries) > maxRows {
-		scrollInfo = fmt.Sprintf(" | Showing %d-%d of %d", startIndex+1, endIndex, len(m.dnsQueries))
-	}
-
+	// Add summary
 	summary := lipgloss.NewStyle().
 		Foreground(muted).
-		Render(fmt.Sprintf("\nTotal queries: %d | Last update: %s%s",
+		Render(fmt.Sprintf("\nTotal queries: %d | Last update: %s",
 			len(m.dnsQueries),
-			m.lastUpdate.Format("15:04:05"),
-			scrollInfo))
+			m.lastUpdate.Format("15:04:05")))
 
 	return table + summary
+}
+
+func (m Model) renderHelp() string {
+	// Create help table with nicely formatted information
+	header := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(accent4).
+		Render("Command                        │ Description")
+
+	separator := lipgloss.NewStyle().
+		Foreground(muted).
+		Render("──────────────────────────────────────────────────────────────")
+
+	helpData := []struct {
+		command     string
+		description string
+	}{
+		{"↑/↓ (Arrow Keys)", "Navigate through DNS query list"},
+		{"Space/Enter", "Toggle Allow/Block status for selected domain"},
+		{"h", "Show/Hide this help screen"},
+		{"esc", "Exit help and return to monitoring"},
+		{"1-3", "Switch between tabs (Monitoring, Settings, About)"},
+		{"q", "Quit the application"},
+		{"←/→ (Arrow Keys)", "Navigate between tabs"},
+	}
+
+	var rows []string
+	for _, item := range helpData {
+		row := lipgloss.NewStyle().
+			Foreground(textColor).
+			Render(fmt.Sprintf("%-30s │ %s", item.command, item.description))
+		rows = append(rows, row)
+	}
+
+	// Join all rows
+	table := "\n" + header + "\n" + separator + "\n" + strings.Join(rows, "\n")
+
+	// Add additional information
+	info := lipgloss.NewStyle().
+		Foreground(muted).
+		Render(fmt.Sprintf("\n\nSinkzone is the world's most effective productivity tool. It will block all your DNS queries on your machine when you are switching it to focus mode except the ones that are explicitly allowed.\n\n" +
+			"In the monitoring menu you can see all the DNS queries you are doing and you can allow the ones you want to use during your focus mode.\n\n" +
+			"DNS Monitoring Information:\n" +
+			"• The table shows the most recent DNS queries\n" +
+			"• Domains are blocked by default unless added to allowlist\n" +
+			"• Use Space/Enter to toggle between Allow/Block status\n" +
+			"• The list automatically truncates to fit your screen\n" +
+			"• Navigation wraps around from bottom to top\n\n"))
+
+	return info + table
 }
 
 func formatTableRow(domain string, count int, timestamp time.Time, status string, isSelected bool) string {
