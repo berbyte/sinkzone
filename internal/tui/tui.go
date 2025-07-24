@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/berbyte/sinkzone/internal/config"
 	"github.com/berbyte/sinkzone/internal/database"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -26,31 +27,46 @@ const sinkzoneBanner = `
                                ░                                   
 `
 
+// Tab-specific state structures
+type MonitoringState struct {
+	dnsQueries  []database.DNSQuery
+	lastUpdate  time.Time
+	lastRefresh time.Time
+	tableCursor int
+	allowlist   []string
+}
+
+type SettingsState struct {
+	cursor         int // Which field is selected (0 = resolver1, 1 = resolver2, 2 = save)
+	resolver1Input string
+	resolver2Input string
+	editingField   int // -1 = not editing, 0 = editing resolver1, 1 = editing resolver2
+}
+
+type AboutState struct {
+	// No specific state needed for now
+}
+
 type Model struct {
-	width      int
-	height     int
-	activeTab  int
-	quitting   bool
-	tabs       []string
-	tabContent []string
+	width     int
+	height    int
+	activeTab int
+	quitting  bool
+	tabs      []string
 
 	// Animation state
 	bannerLines   []string
 	currentLine   int
 	animationDone bool
 
-	// Database and monitoring
-	db          *database.Database
-	dnsQueries  []database.DNSQuery
-	lastUpdate  time.Time
-	lastRefresh time.Time // Track when we last refreshed to only show new records
+	// Database and config
+	db     *database.Database
+	config *config.Config
 
-	// Table scrolling
-	tableCursor int
-	allowlist   []string
-
-	// Help state
-	showHelp bool
+	// Tab-specific states
+	monitoring MonitoringState
+	settings   SettingsState
+	about      AboutState
 }
 
 // Cleanup function to restore terminal
@@ -150,23 +166,47 @@ func Start() error {
 		db = nil
 	}
 
+	// Load config
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Printf("Warning: failed to load config: %v\n", err)
+		cfg = &config.Config{
+			Mode:                "normal",
+			UpstreamNameservers: []string{"8.8.8.8:53", "1.1.1.1:53"},
+		}
+	}
+
+	// Initialize resolver inputs from config
+	resolver1Input := "8.8.8.8:53"
+	resolver2Input := "1.1.1.1:53"
+	if len(cfg.UpstreamNameservers) > 0 {
+		resolver1Input = cfg.UpstreamNameservers[0]
+	}
+	if len(cfg.UpstreamNameservers) > 1 {
+		resolver2Input = cfg.UpstreamNameservers[1]
+	}
+
 	m := Model{
-		tabs: []string{"Monitoring", "Settings", "About"},
-		tabContent: []string{
-			"Main Content Area\n\nThis is where the main content will go.\n\nPress 'q' to quit.",
-			"Second Tab Content\n\nThis is the second tab content.",
-			"Third Tab Content\n\nThis is the third tab content.",
-		},
+		tabs:          []string{"Monitoring", "Settings", "About"},
 		bannerLines:   bannerLines,
 		currentLine:   0,
 		animationDone: false,
 		db:            db,
-		dnsQueries:    []database.DNSQuery{},
-		lastUpdate:    time.Now(),
-		lastRefresh:   time.Now(), // Initialize lastRefresh
-		tableCursor:   0,
-		allowlist:     []string{},
-		showHelp:      false,
+		config:        cfg,
+		monitoring: MonitoringState{
+			dnsQueries:  []database.DNSQuery{},
+			lastUpdate:  time.Now(),
+			lastRefresh: time.Now(),
+			tableCursor: 0,
+			allowlist:   []string{},
+		},
+		settings: SettingsState{
+			cursor:         0,
+			resolver1Input: resolver1Input,
+			resolver2Input: resolver2Input,
+			editingField:   -1,
+		},
+		about: AboutState{},
 	}
 
 	// Create program with improved terminal handling
@@ -174,8 +214,6 @@ func Start() error {
 		m,
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
-		tea.WithInput(os.Stdin),
-		tea.WithOutput(os.Stderr),
 	)
 
 	// Run the program with error handling
@@ -186,6 +224,17 @@ func Start() error {
 	}
 
 	return nil
+}
+
+func (m Model) saveSettings() {
+	// Update config with new resolver values
+	m.config.UpstreamNameservers = []string{m.settings.resolver1Input, m.settings.resolver2Input}
+
+	// Save config to file
+	if err := config.Save(m.config); err != nil {
+		// Could add error handling here, but for now just continue
+		fmt.Printf("Warning: failed to save config: %v\n", err)
+	}
 }
 
 // checkAndRestoreTerminal ensures the terminal is in a proper state
@@ -227,26 +276,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Update DNS data every second
 			if m.db != nil {
 				// Get new records since last refresh
-				newQueries, err := m.db.GetNewDNSRecords(m.lastRefresh)
+				newQueries, err := m.db.GetNewDNSRecords(m.monitoring.lastRefresh)
 				if err == nil && len(newQueries) > 0 {
 					// Append new queries to existing ones
-					m.dnsQueries = append(newQueries, m.dnsQueries...)
+					m.monitoring.dnsQueries = append(newQueries, m.monitoring.dnsQueries...)
 
 					// Limit to last 100 records to prevent memory issues
-					if len(m.dnsQueries) > 100 {
-						m.dnsQueries = m.dnsQueries[:100]
+					if len(m.monitoring.dnsQueries) > 100 {
+						m.monitoring.dnsQueries = m.monitoring.dnsQueries[:100]
 					}
 
-					m.lastUpdate = time.Now()
+					m.monitoring.lastUpdate = time.Now()
 				}
 
 				// Update last refresh time
-				m.lastRefresh = time.Now()
+				m.monitoring.lastRefresh = time.Now()
 
 				// Load allowlist
 				allowlist, err := m.db.GetAllowlist()
 				if err == nil {
-					m.allowlist = allowlist
+					m.monitoring.allowlist = allowlist
 				}
 			}
 			return m, tea.Tick(time.Second, func(t time.Time) tea.Msg {
@@ -260,118 +309,181 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Cleanup terminal before quitting
 			m.cleanup()
 			return m, tea.Quit
-		case "1":
-			if len(m.tabs) > 0 {
-				m.activeTab = 0
-				// Reset cursor when switching to monitoring tab
-				m.tableCursor = 0
-			}
-		case "2":
-			if len(m.tabs) > 1 {
-				m.activeTab = 1
-			}
-		case "3":
-			if len(m.tabs) > 2 {
-				m.activeTab = 2
-			}
-		case "right", "l", "n", "tab":
-			m.activeTab = min(m.activeTab+1, len(m.tabs)-1)
-		case "left", "p", "shift+tab":
+		case "left", "h":
+			// Navigate to previous tab
 			m.activeTab = max(m.activeTab-1, 0)
-		case "up", "k":
-			if m.activeTab == 0 && len(m.dnsQueries) > 0 {
-				// Calculate visible range
-				availableHeight := m.height - 12
-				if availableHeight < 1 {
-					availableHeight = 1
-				}
-				startIndex := 0
-				endIndex := len(m.dnsQueries)
-				if len(m.dnsQueries) > availableHeight {
-					startIndex = len(m.dnsQueries) - availableHeight
-					endIndex = len(m.dnsQueries)
-				}
-
-				// Calculate visible position (0-based index within visible items)
-				visibleIndex := m.tableCursor - startIndex
-				visibleCount := endIndex - startIndex
-
-				// Wrap around within visible range
-				if visibleIndex <= 0 {
-					visibleIndex = visibleCount - 1
-				} else {
-					visibleIndex--
-				}
-
-				// Map back to dataset index
-				m.tableCursor = startIndex + visibleIndex
-			}
-		case "down", "j":
-			if m.activeTab == 0 && len(m.dnsQueries) > 0 {
-				// Calculate visible range
-				availableHeight := m.height - 12
-				if availableHeight < 1 {
-					availableHeight = 1
-				}
-				startIndex := 0
-				endIndex := len(m.dnsQueries)
-				if len(m.dnsQueries) > availableHeight {
-					startIndex = len(m.dnsQueries) - availableHeight
-					endIndex = len(m.dnsQueries)
-				}
-
-				// Calculate visible position (0-based index within visible items)
-				visibleIndex := m.tableCursor - startIndex
-				visibleCount := endIndex - startIndex
-
-				// Wrap around within visible range
-				if visibleIndex >= visibleCount-1 {
-					visibleIndex = 0
-				} else {
-					visibleIndex++
-				}
-
-				// Map back to dataset index
-				m.tableCursor = startIndex + visibleIndex
-			}
-		case " ", "enter":
-			if m.activeTab == 0 && len(m.dnsQueries) > 0 && m.tableCursor < len(m.dnsQueries) {
-				// Toggle allow/block status for selected domain
-				selectedDomain := m.dnsQueries[m.tableCursor].Domain
-				if m.isInAllowlist(selectedDomain) {
-					// Remove from allowlist
-					m.removeFromAllowlist(selectedDomain)
-					// Remove from database
-					if m.db != nil {
-						m.db.RemoveFromAllowlist(selectedDomain)
-					}
-				} else {
-					// Add to allowlist
-					if !m.isInAllowlist(selectedDomain) {
-						m.allowlist = append(m.allowlist, selectedDomain)
-						// Save to database
-						if m.db != nil {
-							m.db.AddToAllowlist(selectedDomain)
-						}
-					}
-				}
-			}
-		case "h", "?":
-			if m.activeTab == 0 {
-				// Toggle help display
-				m.showHelp = !m.showHelp
-			}
-		case "esc":
-			if m.activeTab == 0 && m.showHelp {
-				// Exit help and return to monitoring
-				m.showHelp = false
+		case "right", "l":
+			// Navigate to next tab
+			m.activeTab = min(m.activeTab+1, len(m.tabs)-1)
+		default:
+			// Delegate tab-specific updates to their respective functions
+			switch m.activeTab {
+			case 0: // Monitoring tab
+				m, _ = m.updateMonitoring(msg)
+			case 1: // Settings tab
+				m, _ = m.updateSettings(msg)
+			case 2: // About tab
+				m, _ = m.updateAbout(msg)
 			}
 		}
 	}
 	return m, nil
 }
 
+// Tab-specific update functions
+func (m Model) updateMonitoring(msg tea.KeyMsg) (Model, tea.Cmd) {
+	switch msg.String() {
+	case "up", "k":
+		if len(m.monitoring.dnsQueries) > 0 {
+			// Calculate visible range
+			availableHeight := m.height - 12
+			if availableHeight < 1 {
+				availableHeight = 1
+			}
+			startIndex := 0
+			endIndex := len(m.monitoring.dnsQueries)
+			if len(m.monitoring.dnsQueries) > availableHeight {
+				startIndex = len(m.monitoring.dnsQueries) - availableHeight
+				endIndex = len(m.monitoring.dnsQueries)
+			}
+
+			// Calculate visible position (0-based index within visible items)
+			visibleIndex := m.monitoring.tableCursor - startIndex
+			visibleCount := endIndex - startIndex
+
+			// Wrap around within visible range
+			if visibleIndex <= 0 {
+				visibleIndex = visibleCount - 1
+			} else {
+				visibleIndex--
+			}
+
+			// Map back to dataset index
+			m.monitoring.tableCursor = startIndex + visibleIndex
+		}
+	case "down", "j":
+		if len(m.monitoring.dnsQueries) > 0 {
+			// Calculate visible range
+			availableHeight := m.height - 12
+			if availableHeight < 1 {
+				availableHeight = 1
+			}
+			startIndex := 0
+			endIndex := len(m.monitoring.dnsQueries)
+			if len(m.monitoring.dnsQueries) > availableHeight {
+				startIndex = len(m.monitoring.dnsQueries) - availableHeight
+				endIndex = len(m.monitoring.dnsQueries)
+			}
+
+			// Calculate visible position (0-based index within visible items)
+			visibleIndex := m.monitoring.tableCursor - startIndex
+			visibleCount := endIndex - startIndex
+
+			// Wrap around within visible range
+			if visibleIndex >= visibleCount-1 {
+				visibleIndex = 0
+			} else {
+				visibleIndex++
+			}
+
+			// Map back to dataset index
+			m.monitoring.tableCursor = startIndex + visibleIndex
+		}
+	case "enter", " ":
+		if len(m.monitoring.dnsQueries) > 0 && m.monitoring.tableCursor < len(m.monitoring.dnsQueries) {
+			// Toggle allow/block status for selected domain
+			selectedDomain := m.monitoring.dnsQueries[m.monitoring.tableCursor].Domain
+			if m.isInAllowlist(selectedDomain) {
+				// Remove from allowlist
+				m.removeFromAllowlist(selectedDomain)
+				// Remove from database
+				if m.db != nil {
+					m.db.RemoveFromAllowlist(selectedDomain)
+				}
+			} else {
+				// Add to allowlist
+				if !m.isInAllowlist(selectedDomain) {
+					m.monitoring.allowlist = append(m.monitoring.allowlist, selectedDomain)
+					// Save to database
+					if m.db != nil {
+						m.db.AddToAllowlist(selectedDomain)
+					}
+				}
+			}
+		}
+	}
+	return m, nil
+}
+
+func (m Model) updateSettings(msg tea.KeyMsg) (Model, tea.Cmd) {
+	switch msg.String() {
+	case "up", "k":
+		if m.settings.editingField == -1 {
+			// Not editing, navigate between fields
+			m.settings.cursor = max(m.settings.cursor-1, 0)
+		}
+	case "down", "j":
+		if m.settings.editingField == -1 {
+			// Not editing, navigate between fields
+			m.settings.cursor = min(m.settings.cursor+1, 2) // 0=resolver1, 1=resolver2, 2=save
+		}
+	case "enter":
+		if m.settings.editingField == -1 {
+			// Start editing the selected field
+			if m.settings.cursor == 0 {
+				m.settings.editingField = 0
+			} else if m.settings.cursor == 1 {
+				m.settings.editingField = 1
+			} else if m.settings.cursor == 2 {
+				// Save button pressed
+				m.saveSettings()
+			}
+		} else {
+			// Finish editing
+			m.settings.editingField = -1
+		}
+	case "escape":
+		if m.settings.editingField != -1 {
+			// Cancel editing
+			m.settings.editingField = -1
+		}
+	case "backspace":
+		if m.settings.editingField != -1 {
+			if m.settings.editingField == 0 && len(m.settings.resolver1Input) > 0 {
+				m.settings.resolver1Input = m.settings.resolver1Input[:len(m.settings.resolver1Input)-1]
+			} else if m.settings.editingField == 1 && len(m.settings.resolver2Input) > 0 {
+				m.settings.resolver2Input = m.settings.resolver2Input[:len(m.settings.resolver2Input)-1]
+			}
+		}
+	default:
+		// Handle text input for settings form
+		if m.settings.editingField != -1 {
+			if len(msg.Runes) > 0 {
+				r := msg.Runes[0]
+				if r >= 32 && r <= 126 { // Printable ASCII characters
+					if m.settings.editingField == 0 {
+						m.settings.resolver1Input += string(r)
+					} else if m.settings.editingField == 1 {
+						m.settings.resolver2Input += string(r)
+					}
+				}
+			}
+		}
+	}
+	return m, nil
+}
+
+func (m Model) updateAbout(msg tea.KeyMsg) (Model, tea.Cmd) {
+	// About tab has no interactive elements
+	return m, nil
+}
+
 func (m Model) renderTabs() string {
+	// Safety check to ensure activeTab is within bounds
+	if m.activeTab >= len(m.tabs) {
+		m.activeTab = 0
+	}
+
 	var renderedTabs []string
 
 	for i, t := range m.tabs {
@@ -391,7 +503,7 @@ func (m Model) View() string {
 	}
 
 	// Safety check to ensure activeTab is within bounds
-	if m.activeTab >= len(m.tabContent) {
+	if m.activeTab >= len(m.tabs) {
 		m.activeTab = 0
 	}
 
@@ -431,15 +543,13 @@ func (m Model) View() string {
 
 	// Content area with safety check
 	contentText := "No content available"
-	if m.activeTab < len(m.tabContent) {
+	if m.activeTab < len(m.tabs) {
 		if m.activeTab == 0 { // Monitoring tab
-			if m.showHelp {
-				contentText = m.renderHelp()
-			} else {
-				contentText = m.renderDNSMonitoring()
-			}
-		} else {
-			contentText = m.tabContent[m.activeTab]
+			contentText = m.renderDNSMonitoring()
+		} else if m.activeTab == 1 { // Settings tab
+			contentText = m.renderSettings()
+		} else if m.activeTab == 2 { // About tab
+			contentText = m.renderHelp()
 		}
 	}
 
@@ -453,13 +563,11 @@ func (m Model) View() string {
 	content := contentStyle.Width(m.width - 2).Height(contentHeight).Render(contentText)
 
 	// Footer - pink bar like in screenshot
-	footerText := "q: Quit • h: Help • t: Toggle Focus • 1-3: Switch Tabs • ←/→: Navigate"
+	footerText := "q: Quit • h: Help • t: Toggle Focus • ←/→: Switch Tabs"
 	if m.activeTab == 0 {
-		if m.showHelp {
-			footerText = "esc: Exit Help • h: Hide Help"
-		} else {
-			footerText = "↑/↓: Navigate • Space/Enter: Toggle Allow/Block • h: Help • q: Quit"
-		}
+		footerText = "↑/↓: Navigate • Space/Enter: Toggle Allow/Block • q: Quit • ←/→: Switch Tabs"
+	} else if m.activeTab == 1 {
+		footerText = "↑/↓: Navigate • Enter: Edit/Save • Escape: Cancel • q: Quit • ←/→: Switch Tabs"
 	}
 	footer := footerStyle.Width(m.width).Render(footerText)
 
@@ -477,7 +585,7 @@ func (m Model) View() string {
 }
 
 func (m Model) renderDNSMonitoring() string {
-	if len(m.dnsQueries) == 0 {
+	if len(m.monitoring.dnsQueries) == 0 {
 		return "No DNS queries recorded yet.\n\nStart the DNS resolver to see real-time data."
 	}
 
@@ -493,19 +601,19 @@ func (m Model) renderDNSMonitoring() string {
 
 	// Just show the most recent items that fit on screen
 	startIndex := 0
-	endIndex := len(m.dnsQueries)
-	if len(m.dnsQueries) > maxRows {
+	endIndex := len(m.monitoring.dnsQueries)
+	if len(m.monitoring.dnsQueries) > maxRows {
 		// Show the most recent items
-		startIndex = len(m.dnsQueries) - maxRows
-		endIndex = len(m.dnsQueries)
+		startIndex = len(m.monitoring.dnsQueries) - maxRows
+		endIndex = len(m.monitoring.dnsQueries)
 	}
 
 	// Adjust cursor to be within the visible range
-	if m.tableCursor < startIndex {
-		m.tableCursor = startIndex
+	if m.monitoring.tableCursor < startIndex {
+		m.monitoring.tableCursor = startIndex
 	}
-	if m.tableCursor >= endIndex {
-		m.tableCursor = endIndex - 1
+	if m.monitoring.tableCursor >= endIndex {
+		m.monitoring.tableCursor = endIndex - 1
 	}
 
 	// Create table header with proper alignment
@@ -520,7 +628,7 @@ func (m Model) renderDNSMonitoring() string {
 
 	var rows []string
 	for i := startIndex; i < endIndex; i++ {
-		query := m.dnsQueries[i]
+		query := m.monitoring.dnsQueries[i]
 		status := "Block"                        // Default to blocked
 		statusColor := lipgloss.Color("#FF6B6B") // Red
 		if m.isInAllowlist(query.Domain) {
@@ -536,7 +644,7 @@ func (m Model) renderDNSMonitoring() string {
 
 		// Use helper function for consistent formatting
 		// The cursor should be highlighted if it matches the current row in the dataset
-		isSelected := (i == m.tableCursor)
+		isSelected := (i == m.monitoring.tableCursor)
 		rowText := formatTableRow(domainText, query.Count, query.Timestamp, statusText, isSelected)
 		rows = append(rows, rowText)
 	}
@@ -553,60 +661,102 @@ func (m Model) renderDNSMonitoring() string {
 	summary := lipgloss.NewStyle().
 		Foreground(muted).
 		Render(fmt.Sprintf("\nTotal queries: %d | Last update: %s",
-			len(m.dnsQueries),
-			m.lastUpdate.Format("15:04:05")))
+			len(m.monitoring.dnsQueries),
+			m.monitoring.lastUpdate.Format("15:04:05")))
 
 	return table + summary
 }
 
 func (m Model) renderHelp() string {
-	// Create help table with nicely formatted information
-	header := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(accent4).
-		Render("Command                        │ Description")
+	helpText := `
+Sinkzone - DNS-based Productivity Tool
 
-	separator := lipgloss.NewStyle().
-		Foreground(muted).
-		Render("──────────────────────────────────────────────────────────────")
+This tool helps you stay focused by blocking distracting websites during focus sessions.
 
-	helpData := []struct {
-		command     string
-		description string
-	}{
-		{"↑/↓ (Arrow Keys)", "Navigate through DNS query list"},
-		{"Space/Enter", "Toggle Allow/Block status for selected domain"},
-		{"h", "Show/Hide this help screen"},
-		{"esc", "Exit help and return to monitoring"},
-		{"1-3", "Switch between tabs (Monitoring, Settings, About)"},
-		{"q", "Quit the application"},
-		{"←/→ (Arrow Keys)", "Navigate between tabs"},
+Features:
+• Real-time DNS monitoring
+• Configurable upstream resolvers
+• Allowlist management
+• Focus mode with automatic expiration
+
+Usage:
+• Press ←/→ to switch between tabs
+• Use ↑/↓ to navigate the monitoring table
+• Press Space/Enter to toggle allow/block status
+• Press q to quit
+
+For more information, visit: https://github.com/berbyte/sinkzone
+`
+	return helpText
+}
+
+func (m Model) renderSettings() string {
+	// Form styles
+	formStyle := lipgloss.NewStyle().
+		Padding(1, 2).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#7C3AED"))
+
+	labelStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#E5E7EB")).
+		Bold(true)
+
+	inputStyle := lipgloss.NewStyle().
+		Padding(0, 1).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#6B7280"))
+
+	selectedInputStyle := lipgloss.NewStyle().
+		Padding(0, 1).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#7C3AED")).
+		Background(lipgloss.Color("#1F2937"))
+
+	buttonStyle := lipgloss.NewStyle().
+		Padding(0, 2).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#6B7280")).
+		Foreground(lipgloss.Color("#E5E7EB"))
+
+	selectedButtonStyle := lipgloss.NewStyle().
+		Padding(0, 2).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#7C3AED")).
+		Background(lipgloss.Color("#1F2937")).
+		Foreground(lipgloss.Color("#FFFFFF"))
+
+	// Render form
+	var form strings.Builder
+	form.WriteString("Upstream DNS Resolvers\n\n")
+
+	// Resolver 1
+	form.WriteString(labelStyle.Render("Primary Resolver:"))
+	form.WriteString("\n")
+	if m.settings.cursor == 0 {
+		form.WriteString(selectedInputStyle.Render(m.settings.resolver1Input))
+	} else {
+		form.WriteString(inputStyle.Render(m.settings.resolver1Input))
+	}
+	form.WriteString("\n\n")
+
+	// Resolver 2
+	form.WriteString(labelStyle.Render("Secondary Resolver:"))
+	form.WriteString("\n")
+	if m.settings.cursor == 1 {
+		form.WriteString(selectedInputStyle.Render(m.settings.resolver2Input))
+	} else {
+		form.WriteString(inputStyle.Render(m.settings.resolver2Input))
+	}
+	form.WriteString("\n\n")
+
+	// Save button
+	if m.settings.cursor == 2 {
+		form.WriteString(selectedButtonStyle.Render("Save"))
+	} else {
+		form.WriteString(buttonStyle.Render("Save"))
 	}
 
-	var rows []string
-	for _, item := range helpData {
-		row := lipgloss.NewStyle().
-			Foreground(textColor).
-			Render(fmt.Sprintf("%-30s │ %s", item.command, item.description))
-		rows = append(rows, row)
-	}
-
-	// Join all rows
-	table := "\n" + header + "\n" + separator + "\n" + strings.Join(rows, "\n")
-
-	// Add additional information
-	info := lipgloss.NewStyle().
-		Foreground(muted).
-		Render(fmt.Sprintf("\n\nSinkzone is the world's most effective productivity tool. It will block all your DNS queries on your machine when you are switching it to focus mode except the ones that are explicitly allowed.\n\n" +
-			"In the monitoring menu you can see all the DNS queries you are doing and you can allow the ones you want to use during your focus mode.\n\n" +
-			"DNS Monitoring Information:\n" +
-			"• The table shows the most recent DNS queries\n" +
-			"• Domains are blocked by default unless added to allowlist\n" +
-			"• Use Space/Enter to toggle between Allow/Block status\n" +
-			"• The list automatically truncates to fit your screen\n" +
-			"• Navigation wraps around from bottom to top\n\n"))
-
-	return info + table
+	return formStyle.Render(form.String())
 }
 
 func formatTableRow(domain string, count int, timestamp time.Time, status string, isSelected bool) string {
@@ -633,7 +783,7 @@ func formatTableRow(domain string, count int, timestamp time.Time, status string
 }
 
 func (m Model) isInAllowlist(domain string) bool {
-	for _, allowed := range m.allowlist {
+	for _, allowed := range m.monitoring.allowlist {
 		if allowed == domain {
 			return true
 		}
@@ -642,13 +792,13 @@ func (m Model) isInAllowlist(domain string) bool {
 }
 
 func (m Model) removeFromAllowlist(domain string) {
-	newAllowlist := make([]string, 0, len(m.allowlist))
-	for _, allowed := range m.allowlist {
+	newAllowlist := make([]string, 0, len(m.monitoring.allowlist))
+	for _, allowed := range m.monitoring.allowlist {
 		if allowed != domain {
 			newAllowlist = append(newAllowlist, allowed)
 		}
 	}
-	m.allowlist = newAllowlist
+	m.monitoring.allowlist = newAllowlist
 }
 
 func truncateString(s string, maxLen int) string {
