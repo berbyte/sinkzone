@@ -47,6 +47,10 @@ type AboutState struct {
 	// No specific state needed for now
 }
 
+type AllowedDomainsState struct {
+	cursor int // Which domain is currently selected
+}
+
 type Model struct {
 	width     int
 	height    int
@@ -64,9 +68,10 @@ type Model struct {
 	config *config.Config
 
 	// Tab-specific states
-	monitoring MonitoringState
-	settings   SettingsState
-	about      AboutState
+	monitoring     MonitoringState
+	settings       SettingsState
+	about          AboutState
+	allowedDomains AllowedDomainsState
 }
 
 // Cleanup function to restore terminal
@@ -187,7 +192,7 @@ func Start() error {
 	}
 
 	m := Model{
-		tabs:          []string{"Monitoring", "Settings", "About"},
+		tabs:          []string{"Monitoring", "Allowed Domains", "Settings", "About"},
 		bannerLines:   bannerLines,
 		currentLine:   0,
 		animationDone: false,
@@ -207,6 +212,9 @@ func Start() error {
 			editingField:   -1,
 		},
 		about: AboutState{},
+		allowedDomains: AllowedDomainsState{
+			cursor: 0,
+		},
 	}
 
 	// Create program with improved terminal handling
@@ -320,9 +328,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.activeTab {
 			case 0: // Monitoring tab
 				m, _ = m.updateMonitoring(msg)
-			case 1: // Settings tab
+			case 1: // Allowed Domains tab
+				m, _ = m.updateAllowedDomains(msg)
+			case 2: // Settings tab
 				m, _ = m.updateSettings(msg)
-			case 2: // About tab
+			case 3: // About tab
 				m, _ = m.updateAbout(msg)
 			}
 		}
@@ -478,6 +488,84 @@ func (m Model) updateAbout(msg tea.KeyMsg) (Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m Model) updateAllowedDomains(msg tea.KeyMsg) (Model, tea.Cmd) {
+	switch msg.String() {
+	case "up", "k":
+		if len(m.monitoring.allowlist) > 0 {
+			// Calculate visible range
+			availableHeight := m.height - 12
+			if availableHeight < 1 {
+				availableHeight = 1
+			}
+			startIndex := 0
+			endIndex := len(m.monitoring.allowlist)
+			if len(m.monitoring.allowlist) > availableHeight {
+				startIndex = len(m.monitoring.allowlist) - availableHeight
+				endIndex = len(m.monitoring.allowlist)
+			}
+
+			// Calculate visible position (0-based index within visible items)
+			visibleIndex := m.allowedDomains.cursor - startIndex
+			visibleCount := endIndex - startIndex
+
+			// Wrap around within visible range
+			if visibleIndex <= 0 {
+				visibleIndex = visibleCount - 1
+			} else {
+				visibleIndex--
+			}
+
+			// Map back to dataset index
+			m.allowedDomains.cursor = startIndex + visibleIndex
+		}
+	case "down", "j":
+		if len(m.monitoring.allowlist) > 0 {
+			// Calculate visible range
+			availableHeight := m.height - 12
+			if availableHeight < 1 {
+				availableHeight = 1
+			}
+			startIndex := 0
+			endIndex := len(m.monitoring.allowlist)
+			if len(m.monitoring.allowlist) > availableHeight {
+				startIndex = len(m.monitoring.allowlist) - availableHeight
+				endIndex = len(m.monitoring.allowlist)
+			}
+
+			// Calculate visible position (0-based index within visible items)
+			visibleIndex := m.allowedDomains.cursor - startIndex
+			visibleCount := endIndex - startIndex
+
+			// Wrap around within visible range
+			if visibleIndex >= visibleCount-1 {
+				visibleIndex = 0
+			} else {
+				visibleIndex++
+			}
+
+			// Map back to dataset index
+			m.allowedDomains.cursor = startIndex + visibleIndex
+		}
+	case "enter", " ":
+		if len(m.monitoring.allowlist) > 0 && m.allowedDomains.cursor < len(m.monitoring.allowlist) {
+			// Remove selected domain from allowlist
+			selectedDomain := m.monitoring.allowlist[m.allowedDomains.cursor]
+			m.removeFromAllowlist(selectedDomain)
+
+			// Remove from database
+			if m.db != nil {
+				m.db.RemoveFromAllowlist(selectedDomain)
+			}
+
+			// Adjust cursor if we removed the last item
+			if m.allowedDomains.cursor >= len(m.monitoring.allowlist) {
+				m.allowedDomains.cursor = max(len(m.monitoring.allowlist)-1, 0)
+			}
+		}
+	}
+	return m, nil
+}
+
 func (m Model) renderTabs() string {
 	// Safety check to ensure activeTab is within bounds
 	if m.activeTab >= len(m.tabs) {
@@ -546,9 +634,11 @@ func (m Model) View() string {
 	if m.activeTab < len(m.tabs) {
 		if m.activeTab == 0 { // Monitoring tab
 			contentText = m.renderDNSMonitoring()
-		} else if m.activeTab == 1 { // Settings tab
+		} else if m.activeTab == 1 { // Allowed Domains tab
+			contentText = m.renderAllowedDomains()
+		} else if m.activeTab == 2 { // Settings tab
 			contentText = m.renderSettings()
-		} else if m.activeTab == 2 { // About tab
+		} else if m.activeTab == 3 { // About tab
 			contentText = m.renderHelp()
 		}
 	}
@@ -567,6 +657,8 @@ func (m Model) View() string {
 	if m.activeTab == 0 {
 		footerText = "↑/↓: Navigate • Space/Enter: Toggle Allow/Block • q: Quit • ←/→: Switch Tabs"
 	} else if m.activeTab == 1 {
+		footerText = "↑/↓: Navigate • Space/Enter: Remove Domain • q: Quit • ←/→: Switch Tabs"
+	} else if m.activeTab == 2 {
 		footerText = "↑/↓: Navigate • Enter: Edit/Save • Escape: Cancel • q: Quit • ←/→: Switch Tabs"
 	}
 	footer := footerStyle.Width(m.width).Render(footerText)
@@ -757,6 +849,94 @@ func (m Model) renderSettings() string {
 	}
 
 	return formStyle.Render(form.String())
+}
+
+func (m Model) renderAllowedDomains() string {
+	if len(m.monitoring.allowlist) == 0 {
+		return "No domains in allowlist.\n\nAdd domains from the Monitoring tab by pressing Space/Enter on blocked domains."
+	}
+
+	// Calculate available height for the list
+	availableHeight := m.height - 12
+	if availableHeight < 1 {
+		availableHeight = 1
+	}
+
+	// Determine which domains to show
+	startIndex := 0
+	endIndex := len(m.monitoring.allowlist)
+	if len(m.monitoring.allowlist) > availableHeight {
+		startIndex = len(m.monitoring.allowlist) - availableHeight
+		endIndex = len(m.monitoring.allowlist)
+	}
+
+	// Adjust cursor to be within the visible range
+	if m.allowedDomains.cursor < startIndex {
+		m.allowedDomains.cursor = startIndex
+	}
+	if m.allowedDomains.cursor >= endIndex {
+		m.allowedDomains.cursor = endIndex - 1
+	}
+
+	// Use the same styles as monitoring tab
+	headerStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(accent4).
+		Padding(0, 1)
+
+	// Create table header
+	header := headerStyle.Render("Domain                          │ Status")
+	separator := lipgloss.NewStyle().
+		Foreground(muted).
+		Render("──────────────────────────────────────────────────────────────")
+
+	// Render domain list with consistent table format
+	var rows []string
+	for i := startIndex; i < endIndex; i++ {
+		domain := m.monitoring.allowlist[i]
+		isSelected := (i == m.allowedDomains.cursor)
+
+		// Use the same row formatting as monitoring tab
+		rowText := formatAllowedDomainRow(domain, isSelected)
+		rows = append(rows, rowText)
+	}
+
+	// Join all rows
+	table := "\n" + header + "\n" + separator + "\n" + strings.Join(rows, "\n")
+
+	// Add summary with consistent styling
+	summary := lipgloss.NewStyle().
+		Foreground(muted).
+		Render(fmt.Sprintf("\nTotal allowed domains: %d", len(m.monitoring.allowlist)))
+
+	return table + summary
+}
+
+func formatAllowedDomainRow(domain string, isSelected bool) string {
+	// Use the same styling as the monitoring tab
+	statusText := "Allowed"
+	statusColor := lipgloss.Color("#4ADE80") // Green for allowed
+
+	// Format the row with consistent column widths
+	domainText := truncateString(domain, 30)
+	statusTextFormatted := lipgloss.NewStyle().
+		Foreground(statusColor).
+		Render(statusText)
+
+	// Create the row with consistent formatting
+	row := fmt.Sprintf("%-30s │ %s", domainText, statusTextFormatted)
+
+	if isSelected {
+		// Use the same selected row styling as monitoring tab
+		return lipgloss.NewStyle().
+			Background(lipgloss.Color("#2E3440")).
+			Foreground(lipgloss.Color("#ECEFF4")).
+			Render(row)
+	} else {
+		return lipgloss.NewStyle().
+			Foreground(textColor).
+			Render(row)
+	}
 }
 
 func formatTableRow(domain string, count int, timestamp time.Time, status string, isSelected bool) string {
