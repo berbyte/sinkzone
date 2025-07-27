@@ -60,7 +60,7 @@ brews:
       name: GitHub Actions
       email: actions@github.com
     url_template: "https://github.com/berbyte/sinkzone/releases/download/v{{ .Version }}/{{ .ArtifactName }}"
-    commit_msg_template: "Update {{ .Name }} to v{{ .Version }}"
+    commit_msg_template: "Update {{ .ProjectName }} to v{{ .Version }}"
 
 release:
   name_template: 'v{{ .Version }}'

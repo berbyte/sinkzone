@@ -81,6 +81,5 @@ func Execute() error {
 	rootCmd.AddCommand(focusCmd)
 	rootCmd.AddCommand(disableFocusCmd)
 	rootCmd.AddCommand(statusCmd)
-	rootCmd.AddCommand(helpCmd)
 	return rootCmd.Execute()
 }
