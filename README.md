@@ -1,12 +1,27 @@
-# Sinkzone
+<a id="readme-top"></a>
 
-![Sinkzone Splash](https://share.ber.sh/sinkzone-splash.png)
+<div align="center">
+  <img src="https://share.ber.sh/sinkzone-splash.png" alt="Sinkzone: DNS-based Productivity Tool">
+  <h1 align="center">Sinkzone: DNS-based Productivity Tool</h1>
+  <p align="center">
+    <a href="#what-is-sinkzone"><strong>Learn More »</strong></a>
+    <br />
+    <br />
+    <a href="#quick-start">Quick Start</a>
+    &middot;
+    <a href="https://github.com/berbyte/sinkzone/issues/new">Report a Bug</a>
+    &middot;
+    <a href="#usage">Usage Guide</a>
+  </p>
+</div>
 
-> **A DNS-based productivity tool that blocks distracting websites during focus sessions.**
+<div align="center">
 
 [![Go Version](https://img.shields.io/badge/Go-1.24+-blue.svg)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)](https://github.com/berbyte/sinkzone/releases)
+
+</div>
 
 ## What is Sinkzone?
 
@@ -16,6 +31,8 @@ Sinkzone is a DNS-based productivity tool that helps you stay focused by blockin
 - 🔒 **DNS-level blocking** - Blocks at the network level, not just browser
 - 🎯 **Focus mode** - Temporarily block non-allowlisted domains with auto-expiration
 - 📊 **Real-time monitoring** - Beautiful TUI to monitor DNS traffic and manage allowlist
+- ⚡ **Instant state sync** - Real-time communication between resolver and TUI
+- 🛡️ **System service** - Run as background service on Linux/macOS
 
 ## Quick Start
 
@@ -71,6 +88,7 @@ sinkzone
 - Press `f` in the TUI, or
 - Run: `sinkzone focus 1h`
 
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Usage
 
@@ -104,6 +122,8 @@ sinkzone
 - All other domains return `NXDOMAIN` (domain not found)
 - Automatically expires after the specified duration
 - Red banner indicator in TUI
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Service Management
 
@@ -139,6 +159,15 @@ go test ./...
 go run main.go
 ```
 
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
 ## License
 
-MIT License - see the [LICENSE](LICENSE) file for details. 
+MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Contact
+
+- Sinkzone - github@ber.run
+- Project Link: [https://github.com/berbyte/sinkzone](https://github.com/berbyte/sinkzone)
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p> 
