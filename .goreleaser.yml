@@ -63,20 +63,20 @@ changelog:
       - Merge pull request
       - Merge branch
 
-brews:
-  - name: sinkzone
-    homepage: "https://github.com/berbyte/sinkzone"
-    description: "A strict DNS filter to help you stay focused — or keep your kids safe"
-    repository:
-      owner: berbyte
-      name: homebrew-tap
-      branch: main
-    commit_author:
-      name: GitHub Actions
-      email: actions@github.com
-    url_template: "https://github.com/berbyte/sinkzone/releases/download/v{{ .Version }}/{{ .ArtifactName }}"
-    commit_msg_template: "Update {{ .ProjectName }} to v{{ .Version }}"
-    path: "Formula/sinkzone.rb"
+# brews:
+#   - name: sinkzone
+#     homepage: "https://github.com/berbyte/sinkzone"
+#     description: "A strict DNS filter to help you stay focused — or keep your kids safe"
+#     repository:
+#       owner: berbyte
+#       name: homebrew-tap
+#       branch: main
+#     commit_author:
+#       name: GitHub Actions
+#       email: actions@github.com
+#     url_template: "https://github.com/berbyte/sinkzone/releases/download/v{{ .Version }}/{{ .ArtifactName }}"
+#     commit_msg_template: "Update {{ .ProjectName }} to v{{ .Version }}"
+#     path: "Formula/sinkzone.rb"
 
 release:
   name_template: 'v{{ .Version }}'
