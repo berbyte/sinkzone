@@ -36,6 +36,42 @@ archives:
 checksum:
   name_template: 'checksums.txt'
 
+# Native packages
+nfpms:
+  - maintainer: "dOMiNiS <dominis@ber.run>"
+    description: "DNS-based productivity tool"
+    homepage: "https://github.com/berbyte/sinkzone"
+    license: "MIT"
+    formats:
+      - deb
+      - rpm
+    contents:
+      - src: dist/{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}/{{ .Binary }}
+        dst: /usr/local/bin/{{ .Binary }}
+    scripts:
+      postinstall: |
+        #!/bin/sh
+        echo "Sinkzone installed successfully!"
+        echo "Run 'sudo sinkzone resolver' to start the DNS service"
+      postrm: |
+        #!/bin/sh
+        echo "Sinkzone removed successfully!"
+
+# Windows MSI packages
+msi:
+  - name: "Sinkzone"
+    short_description: "DNS-based productivity tool"
+    long_description: "Sinkzone helps you stay focused by blocking distracting websites at the DNS level"
+    maintainer: "dOMiNiS <dominis@ber.run>"
+    product_code: "{{ .ProjectName }}-{{ .Version }}"
+    upgrade_code: "{{ .ProjectName }}-upgrade"
+    contents:
+      - src: dist/{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}/{{ .Binary }}
+        dst: "{{ .Binary }}.exe"
+    env:
+      - name: "PATH"
+        value: "{{ .Env.PATH }};{{ .InstallDir }}"
+
 snapshot:
   name_template: "{{ incpatch .Version }}-next"
 
