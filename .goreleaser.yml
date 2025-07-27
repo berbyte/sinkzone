@@ -59,7 +59,6 @@ brews:
     commit_author:
       name: GitHub Actions
       email: actions@github.com
-    folder: Formula
     url_template: "https://github.com/berbyte/sinkzone/releases/download/v{{ .Version }}/{{ .ArtifactName }}"
     commit_msg_template: "Update {{ .Name }} to v{{ .Version }}"
 
