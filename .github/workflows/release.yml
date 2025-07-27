@@ -33,22 +33,23 @@ jobs:
   update-homebrew:
     needs: goreleaser
     runs-on: ubuntu-latest
+    permissions: write-all
     steps:
       - name: Checkout sinkzone
         uses: actions/checkout@v4
         with:
           path: sinkzone
 
-      - name: Checkout tap
+      - name: Checkout homebrew-tap
         uses: actions/checkout@v4
         with:
           repository: berbyte/homebrew-tap
-          path: tap
+          path: homebrew-tap
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update Homebrew formula
         run: |
-          cd tap
+          cd homebrew-tap
           # Get the latest release version
           VERSION=$(echo ${{ github.ref }} | sed 's/refs\/tags\/v//')
           
@@ -79,9 +80,9 @@ jobs:
 
       - name: Commit and push changes
         run: |
-          cd tap
+          cd homebrew-tap
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git add Formula/sinkzone.rb
           git commit -m "Update sinkzone to v${VERSION}"
-          git push 
+          git push origin main
