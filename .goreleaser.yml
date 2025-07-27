@@ -13,7 +13,7 @@ builds:
       - amd64
       - arm64
     ignore:
-      - goos == windows && goarch == arm64
+      - "goos == windows && goarch == arm64"
     ldflags:
       - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
     binary: sinkzone
@@ -59,13 +59,8 @@ brews:
       name: GitHub Actions
       email: actions@github.com
     folder: Formula
-    homepage_template: "https://github.com/berbyte/sinkzone"
-    description_template: "A strict DNS filter to help you stay focused — or keep your kids safe"
     url_template: "https://github.com/berbyte/sinkzone/releases/download/v{{ .Version }}/{{ .ArtifactName }}"
     commit_msg_template: "Update {{ .Name }} to v{{ .Version }}"
-    extra_files:
-      - README.md
-      - LICENSE
 
 release:
   name_template: 'v{{ .Version }}'

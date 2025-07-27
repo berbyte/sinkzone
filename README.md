@@ -8,96 +8,82 @@
 ▒██████▒▒░██░▒██░   ▓██░▒██▒ █▄▒███████▒░ ████▓▒░▒██░   ▓██░░▒████▒
 ▒ ▒▓▒ ▒ ░░▓  ░ ▒░   ▒ ▒ ▒ ▒▒ ▓▒░▒▒ ▓░▒░▒░ ▒░▒░▒░ ░ ▒░   ▒ ▒ ░░ ▒░ ░
 ░ ░▒  ░ ░ ▒ ░░ ░░   ░ ▒░░ ░▒ ▒░░░▒ ▒ ░ ▒  ░ ▒ ▒░ ░ ░░   ░ ▒░ ░ ░  ░
-░  ░  ░   ▒ ░   ░   ░ ░ ░ ░░ ░ ░ ░ ░ ░░ ░ ░ ▒     ░   ░ ░    ░   
+░  ░  ░   ▒ ░   ░   ░ ░ ░ ░░ ░ ░ ░ ░░ ░ ░ ▒     ░   ░ ░    ░   
       ░   ░           ░ ░  ░     ░ ░        ░ ░           ░    ░  ░
                                ░                                   
 ```
 
-> **A DNS-based productivity tool that helps you stay focused by blocking distracting websites during focus sessions.**
+> **A DNS-based productivity tool that blocks distracting websites during focus sessions.**
 
 [![Go Version](https://img.shields.io/badge/Go-1.24+-blue.svg)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)](https://github.com/berbyte/sinkzone/releases)
 
-## 🚀 Features
+## What is Sinkzone?
 
-- **🔒 DNS-based Blocking**: Blocks distracting websites at the DNS level
-- **🎯 Focus Mode**: Temporarily block non-allowlisted domains with automatic expiration
-- **📊 Real-time Monitoring**: Beautiful TUI for monitoring DNS traffic and managing allowlist
-- **⚡ Instant State Sync**: Real-time communication between resolver and TUI
-- **🛡️ Service Integration**: Run as system service on Linux/macOS
-- **📱 Cross-platform**: macOS, Linux, and Windows support
-- **🎨 Beautiful TUI**: Lipgloss-powered terminal interface with animations
-- **💾 Persistent Storage**: SQLite database for queries and allowlist
-- **⚙️ Easy Configuration**: YAML-based configuration with sensible defaults
+Sinkzone is a DNS-based productivity tool that helps you stay focused by blocking distracting websites at the DNS level. When you enable focus mode, only domains in your allowlist will resolve - everything else returns NXDOMAIN.
 
+**Key Features:**
+- 🔒 **DNS-level blocking** - Blocks at the network level, not just browser
+- 🎯 **Focus mode** - Temporarily block non-allowlisted domains with auto-expiration
+- 📊 **Real-time monitoring** - Beautiful TUI to monitor DNS traffic and manage allowlist
 
-## 🏗️ Architecture
+## Quick Start
 
-Sinkzone uses a **shared SQLite database** to enable real-time communication between the root DNS resolver and unprivileged TUI process:
+### 1. Install
 
-- **🔧 DNS Resolver** (runs as root): Records all DNS queries and applies focus mode rules
-- **🖥️ TUI Interface** (runs as user): Monitors DNS stats and manages allowlist
-- **💾 Database**: Shared SQLite file with WAL mode for concurrent access
-- **⚡ State Management**: File-based state sync for instant focus mode changes
-
-## Architecture
-
-Sinkzone uses a **shared SQLite database** to enable communication between the root DNS resolver and unprivileged monitor process:
-
-- **DNS Resolver** (runs as root): Records all DNS queries to SQLite database
-- **Monitor** (runs as user): Reads DNS stats and manages allowlist via TUI
-- **Database**: Shared SQLite file with WAL mode for concurrent access
-
-## 📦 Installation
-
-### Homebrew (Recommended)
-
+**Homebrew (Recommended):**
 ```bash
-# Add the tap and install
 brew tap berbyte/sinkzone
 brew install sinkzone
 ```
 
-### Manual Installation
-
+**Manual:**
 ```bash
-# Clone the repository
-git clone https://github.com/berbyte/sinkzone.git
-cd sinkzone
-
-# Build the binary
+# Download from releases or build from source
 go build -o sinkzone .
-
-# Install (optional)
-sudo cp sinkzone /usr/local/bin/
 ```
 
-### Download Binaries
+### 2. Start the DNS Resolver
 
-Download pre-built binaries from the [releases page](https://github.com/berbyte/sinkzone/releases).
+The DNS resolver needs root privileges to bind to port 53:
 
-## 🚀 Quick Start
+```bash
+sudo sinkzone resolver
+```
 
-1. **Start the DNS resolver** (requires root):
-   ```bash
-   sudo sinkzone resolver
-   ```
+### 3. Configure System DNS
 
-2. **Open the TUI in another terminal**:
-   ```bash
-   sinkzone
-   ```
+Set your system's DNS server to `127.0.0.1`:
 
-3. **Enable focus mode**:
-   - Press `f` in the TUI, or
-   - Run: `sinkzone focus 1h`
+**macOS:**
+```bash
+sudo networksetup -setdnsservers "Wi-Fi" 127.0.0.1
+```
 
-4. **Configure your system DNS**:
-   - Set DNS server to `127.0.0.1`
-   - Or use the resolver as a forwarder
+**Linux:**
+```bash
+echo "nameserver 127.0.0.1" | sudo tee /etc/resolv.conf
+```
 
-## 🎮 Usage
+**Windows:**
+- Network Settings → Change adapter options → Properties → Internet Protocol Version 4 → Properties → Use the following DNS server addresses: 127.0.0.1
+
+### 4. Open the TUI
+
+In another terminal:
+
+```bash
+sinkzone
+```
+
+### 5. Enable Focus Mode
+
+- Press `f` in the TUI, or
+- Run: `sinkzone focus 1h`
+
+
+## Usage
 
 ### Commands
 
@@ -117,91 +103,10 @@ Download pre-built binaries from the [releases page](https://github.com/berbyte/
 - **Settings**: Configure upstream DNS resolvers
 - **Quit**: Press `q` to exit
 
-## 🔧 Service Management
-
-### Linux (systemd)
-
-```bash
-# Enable and start the service
-sudo systemctl enable sinkzone-resolver
-sudo systemctl start sinkzone-resolver
-
-# Check status
-sudo systemctl status sinkzone-resolver
-
-# Stop the service
-sudo systemctl stop sinkzone-resolver
-```
-
-### macOS (launchd)
-
-```bash
-# Enable and start the service
-sudo launchctl load /Library/LaunchDaemons/com.berbyte.sinkzone.resolver.plist
-
-# Stop the service
-sudo launchctl unload /Library/LaunchDaemons/com.berbyte.sinkzone.resolver.plist
-
-# Check logs
-tail -f /var/log/sinkzone-resolver.log
-```
-
-## ⚙️ Configuration
-
-Configuration files are stored in `~/.sinkzone/`:
-
-### Main Configuration (`~/.sinkzone/sinkzone.yaml`)
-
-```yaml
-mode: normal  # or "focus"
-upstream_nameservers:
-  - "8.8.8.8"
-  - "1.1.1.1"
-```
-
-### State Management (`~/.sinkzone/state.json`)
-
-```json
-{
-  "focus_mode": false,
-  "focus_end_time": "2025-07-28T00:18:19.135892+02:00",
-  "last_updated": "2025-07-27T23:18:19.135892+02:00"
-}
-```
-
-### Database (`~/.sinkzone/sinkzone.db`)
-
-The SQLite database contains:
-- **dns_queries**: All DNS queries with timestamps and blocked status
-- **allowlist**: Active domains that are allowed during focus mode
-
-## 🖥️ TUI Interface
-
-### Monitoring Tab
-- **Real-time DNS traffic statistics**
-- **Domain query counts and last seen times**
-- **Blocked vs allowed status**
-- **Add/remove domains from allowlist**
-- **Sort by query count**
-
-### Allowed Domains Tab
-- **Manage your allowlist**
-- **Add/remove domains**
-- **View current allowlist**
-
-### Settings Tab
-- **Configure upstream DNS resolvers**
-- **View current configuration**
-- **Save settings**
-
-### About Tab
-- **Help information**
-- **Usage instructions**
-
-## 🔍 How It Works
+## How It Works
 
 ### Normal Mode
-- All DNS requests are forwarded to upstream nameservers without blocking
+- All DNS requests are forwarded to upstream nameservers
 - Real-time monitoring of DNS traffic
 - Allowlist management
 
@@ -211,100 +116,40 @@ The SQLite database contains:
 - Automatically expires after the specified duration
 - Red banner indicator in TUI
 
-### DNS Resolver
-- Listens on port 53 (requires root)
-- Records all queries to SQLite database
-- Forwards requests to configured upstream nameservers
-- Applies focus mode rules based on allowlist
+## Service Management
 
-### TUI Interface
-- Reads DNS statistics from SQLite database
-- Provides tabs for monitoring and configuration
-- Real-time state synchronization
-- Beautiful terminal interface with animations
-
-## 🌐 System Integration
-
-### macOS
+### Linux (systemd)
 ```bash
-# Set DNS server to localhost
-sudo networksetup -setdnsservers "Wi-Fi" 127.0.0.1
+sudo systemctl enable sinkzone-resolver
+sudo systemctl start sinkzone-resolver
 ```
 
-### Linux
+### macOS (launchd)
 ```bash
-# Edit /etc/resolv.conf
-echo "nameserver 127.0.0.1" | sudo tee /etc/resolv.conf
+sudo launchctl load /Library/LaunchDaemons/com.berbyte.sinkzone.resolver.plist
 ```
 
-### Windows
-- Network Settings → Change adapter options → Properties → Internet Protocol Version 4 → Properties → Use the following DNS server addresses: 127.0.0.1
+## Configuration
 
-## 🛠️ Development
+Configuration files are stored in `~/.sinkzone/`:
 
-### Building
+- `sinkzone.yaml` - Main configuration
+- `sinkzone.db` - SQLite database for queries and allowlist
+- `state.json` - Focus mode state
+
+## Development
+
 ```bash
+# Build
 go build -o sinkzone .
-```
 
-### Running Tests
-```bash
+# Run tests
 go test ./...
+
+# Run manually
+go run main.go
 ```
 
-### Project Structure
-```
-sinkzone/
-├── main.go              # Entry point
-├── cmd/                 # CLI commands
-│   ├── root.go         # Root command (starts TUI)
-│   ├── resolver.go     # DNS resolver command
-│   ├── focus.go        # Focus mode command
-│   └── help.go         # Help command
-├── internal/
-│   ├── config/         # Configuration management
-│   ├── database/       # SQLite database operations
-│   ├── dns/           # DNS server implementation
-│   └── tui/           # TUI interface
-└── tap/               # Homebrew tap
-    └── Formula/
-        └── sinkzone.rb # Homebrew formula
-```
+## License
 
-## 📚 Dependencies
-
-- `github.com/miekg/dns` - DNS server implementation
-- `github.com/spf13/cobra` - CLI framework
-- `github.com/charmbracelet/bubbletea` - TUI framework
-- `github.com/charmbracelet/bubbles` - TUI components
-- `github.com/charmbracelet/huh` - Interactive forms
-- `github.com/charmbracelet/lipgloss` - Terminal styling
-- `github.com/mattn/go-sqlite3` - SQLite driver
-- `gopkg.in/yaml.v3` - YAML configuration parsing
-
-## 📄 License
-
-MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📈 Roadmap
-
-- [ ] Windows service support
-- [ ] Web interface
-- [ ] Mobile app companion
-- [ ] Advanced analytics
-- [ ] Custom block lists
-- [ ] Integration with productivity tools
-
-## ⭐ Support
-
-If you find this project helpful, please consider giving it a star! ⭐
-
-For issues and feature requests, please use the [GitHub Issues](https://github.com/berbyte/sinkzone/issues) page. 
+MIT License - see the [LICENSE](LICENSE) file for details. 
