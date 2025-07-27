@@ -1,0 +1,86 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.24'
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v5
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Update Homebrew tap
+  update-homebrew:
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sinkzone
+        uses: actions/checkout@v4
+        with:
+          path: sinkzone
+
+      - name: Checkout tap
+        uses: actions/checkout@v4
+        with:
+          repository: berbyte/homebrew-tap
+          path: tap
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Homebrew formula
+        run: |
+          cd tap
+          # Get the latest release version
+          VERSION=$(echo ${{ github.ref }} | sed 's/refs\/tags\/v//')
+          
+          # Download and calculate SHA256 for each platform
+          # macOS ARM64
+          curl -L -o sinkzone_Darwin_arm64.tar.gz "https://github.com/berbyte/sinkzone/releases/download/v${VERSION}/sinkzone_Darwin_arm64.tar.gz"
+          SHA256_ARM64=$(shasum -a 256 sinkzone_Darwin_arm64.tar.gz | cut -d' ' -f1)
+          
+          # macOS x86_64
+          curl -L -o sinkzone_Darwin_x86_64.tar.gz "https://github.com/berbyte/sinkzone/releases/download/v${VERSION}/sinkzone_Darwin_x86_64.tar.gz"
+          SHA256_X86_64=$(shasum -a 256 sinkzone_Darwin_x86_64.tar.gz | cut -d' ' -f1)
+          
+          # Linux ARM64
+          curl -L -o sinkzone_Linux_arm64.tar.gz "https://github.com/berbyte/sinkzone/releases/download/v${VERSION}/sinkzone_Linux_arm64.tar.gz"
+          SHA256_LINUX_ARM64=$(shasum -a 256 sinkzone_Linux_arm64.tar.gz | cut -d' ' -f1)
+          
+          # Linux x86_64
+          curl -L -o sinkzone_Linux_x86_64.tar.gz "https://github.com/berbyte/sinkzone/releases/download/v${VERSION}/sinkzone_Linux_x86_64.tar.gz"
+          SHA256_LINUX_X86_64=$(shasum -a 256 sinkzone_Linux_x86_64.tar.gz | cut -d' ' -f1)
+          
+          # Update the formula
+          sed -i "s/version \"[^\"]*\"/version \"${VERSION}\"/" Formula/sinkzone.rb
+          sed -i "s/PLACEHOLDER_SHA256_ARM64/${SHA256_ARM64}/" Formula/sinkzone.rb
+          sed -i "s/PLACEHOLDER_SHA256_X86_64/${SHA256_X86_64}/" Formula/sinkzone.rb
+          
+          # Clean up downloaded files
+          rm sinkzone_*.tar.gz
+
+      - name: Commit and push changes
+        run: |
+          cd tap
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add Formula/sinkzone.rb
+          git commit -m "Update sinkzone to v${VERSION}"
+          git push 

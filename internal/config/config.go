@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -38,7 +39,7 @@ func Load() (*Config, error) {
 		// Create default config
 		cfg = &Config{
 			Mode:                "normal",
-			UpstreamNameservers: []string{"8.8.8.8:53", "1.1.1.1:53"},
+			UpstreamNameservers: []string{"8.8.8.8", "1.1.1.1"},
 		}
 
 		// Save default config
@@ -80,4 +81,53 @@ func getConfigPath() string {
 		homeDir = "."
 	}
 	return filepath.Join(homeDir, ".sinkzone", "sinkzone.yaml")
+}
+
+// GetUpstreamAddresses returns the upstream nameservers with port 53 appended
+func (c *Config) GetUpstreamAddresses() []string {
+	addresses := make([]string, len(c.UpstreamNameservers))
+	for i, addr := range c.UpstreamNameservers {
+		// If the address doesn't already have a port, append :53
+		if !strings.Contains(addr, ":") {
+			addresses[i] = addr + ":53"
+		} else {
+			addresses[i] = addr
+		}
+	}
+	return addresses
+}
+
+// ValidateUpstreamAddress validates if an address is a valid IP address
+func ValidateUpstreamAddress(addr string) bool {
+	// Remove port if present for validation
+	ipAddr := addr
+	if strings.Contains(addr, ":") {
+		ipAddr = strings.Split(addr, ":")[0]
+	}
+
+	// Basic IP validation (IPv4)
+	parts := strings.Split(ipAddr, ".")
+	if len(parts) != 4 {
+		return false
+	}
+
+	for _, part := range parts {
+		if len(part) == 0 || len(part) > 3 {
+			return false
+		}
+		for _, char := range part {
+			if char < '0' || char > '9' {
+				return false
+			}
+		}
+		num := 0
+		for _, char := range part {
+			num = num*10 + int(char-'0')
+		}
+		if num > 255 {
+			return false
+		}
+	}
+
+	return true
 }

@@ -67,6 +67,12 @@ type Model struct {
 	db     *database.Database
 	config *config.Config
 
+	// Focus mode state
+	focusModeActive  bool
+	focusEndTime     *time.Time
+	focusMessage     string // Temporary message when focus mode is activated
+	focusMessageTime time.Time
+
 	// Tab-specific states
 	monitoring     MonitoringState
 	settings       SettingsState
@@ -177,13 +183,13 @@ func Start() error {
 		fmt.Printf("Warning: failed to load config: %v\n", err)
 		cfg = &config.Config{
 			Mode:                "normal",
-			UpstreamNameservers: []string{"8.8.8.8:53", "1.1.1.1:53"},
+			UpstreamNameservers: []string{"8.8.8.8", "1.1.1.1"},
 		}
 	}
 
 	// Initialize resolver inputs from config
-	resolver1Input := "8.8.8.8:53"
-	resolver2Input := "1.1.1.1:53"
+	resolver1Input := "8.8.8.8"
+	resolver2Input := "1.1.1.1"
 	if len(cfg.UpstreamNameservers) > 0 {
 		resolver1Input = cfg.UpstreamNameservers[0]
 	}
@@ -217,6 +223,14 @@ func Start() error {
 		},
 	}
 
+	// Initialize focus mode status
+	m.updateFocusModeStatus()
+
+	// If focus mode is active, start on allowed domains tab instead of monitoring
+	if m.focusModeActive {
+		m.activeTab = 1 // Start on Allowed Domains tab
+	}
+
 	// Create program with improved terminal handling
 	p := tea.NewProgram(
 		m,
@@ -243,6 +257,45 @@ func (m Model) saveSettings() {
 		// Could add error handling here, but for now just continue
 		fmt.Printf("Warning: failed to save config: %v\n", err)
 	}
+}
+
+func (m Model) enableFocusMode() error {
+	// Initialize state manager
+	stateMgr, err := config.NewStateManager()
+	if err != nil {
+		return fmt.Errorf("failed to initialize state manager: %w", err)
+	}
+
+	// Enable focus mode for 1 hour
+	if err := stateMgr.SetFocusMode(true, time.Hour); err != nil {
+		return fmt.Errorf("failed to enable focus mode: %w", err)
+	}
+
+	return nil
+}
+
+func (m Model) updateFocusModeStatus() {
+	// Initialize state manager
+	stateMgr, err := config.NewStateManager()
+	if err != nil {
+		return
+	}
+
+	// Force reload state from file by calling CheckFocusMode
+	stateMgr.CheckFocusMode()
+
+	// Get current state
+	state := stateMgr.GetState()
+
+	// Update focus mode status
+	m.focusModeActive = state.FocusMode
+	m.focusEndTime = state.FocusEndTime
+
+	// If focus mode is active and we're on the monitoring tab, switch to allowed domains tab
+	if m.focusModeActive && m.activeTab == 0 {
+		m.activeTab = 1 // Switch to Allowed Domains tab
+	}
+
 }
 
 // checkAndRestoreTerminal ensures the terminal is in a proper state
@@ -277,6 +330,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return tickMsg(t)
 				})
 			}
+
+			// Check focus mode status during animation too
+			m.updateFocusModeStatus()
+
 			return m, tea.Tick(time.Millisecond*100, func(t time.Time) tea.Msg {
 				return tickMsg(t)
 			})
@@ -306,6 +363,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.monitoring.allowlist = allowlist
 				}
 			}
+
+			// Check focus mode status
+			m.updateFocusModeStatus()
+
+			// Clear focus message after 3 seconds
+			if m.focusMessage != "" && time.Since(m.focusMessageTime) > 3*time.Second {
+				m.focusMessage = ""
+			}
+
 			return m, tea.Tick(time.Second, func(t time.Time) tea.Msg {
 				return tickMsg(t)
 			})
@@ -317,17 +383,67 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Cleanup terminal before quitting
 			m.cleanup()
 			return m, tea.Quit
+		case "f":
+			// Enable focus mode for 1 hour
+			if err := m.enableFocusMode(); err != nil {
+				// Could add error handling here, but for now just continue
+				fmt.Printf("Warning: failed to enable focus mode: %v\n", err)
+			} else {
+				// Immediately update focus mode status in TUI
+				m.updateFocusModeStatus()
+				// Show temporary success message
+				m.focusMessage = "🔒 Focus mode activated for 1 hour!"
+				m.focusMessageTime = time.Now()
+			}
+		case "space", "enter":
+			// Disable space/enter in monitoring tab when focus mode is active
+			if m.activeTab == 0 && m.focusModeActive {
+				// Do nothing - prevent allowing/blocking domains during focus mode
+				return m, nil
+			}
 		case "left", "h":
 			// Navigate to previous tab
-			m.activeTab = max(m.activeTab-1, 0)
+			if m.activeTab > 0 {
+				m.activeTab--
+			} else {
+				m.activeTab = len(m.tabs) - 1 // Wrap to last tab
+			}
+			// If focus mode is active, skip monitoring tab
+			if m.focusModeActive && m.activeTab == 0 {
+				m.activeTab = len(m.tabs) - 1 // Go to last tab instead
+			}
 		case "right", "l":
 			// Navigate to next tab
-			m.activeTab = min(m.activeTab+1, len(m.tabs)-1)
+			if m.activeTab < len(m.tabs)-1 {
+				m.activeTab++
+			} else {
+				m.activeTab = 0 // Wrap to first tab
+			}
+			// If focus mode is active, skip monitoring tab
+			if m.focusModeActive && m.activeTab == 0 {
+				m.activeTab = 1 // Go to next tab instead
+			}
+		case "1", "2", "3", "4":
+			// Direct tab navigation (1-4 keys)
+			tabIndex := int(msg.String()[0] - '1') // Convert "1" to 0, "2" to 1, etc.
+			if tabIndex >= 0 && tabIndex < len(m.tabs) {
+				// If focus mode is active, prevent going to monitoring tab (index 0)
+				if m.focusModeActive && tabIndex == 0 {
+					// Do nothing - stay on current tab
+					return m, nil
+				}
+				m.activeTab = tabIndex
+			}
 		default:
 			// Delegate tab-specific updates to their respective functions
 			switch m.activeTab {
 			case 0: // Monitoring tab
-				m, _ = m.updateMonitoring(msg)
+				if m.focusModeActive {
+					// Do nothing - monitoring tab is disabled during focus mode
+					return m, nil
+				} else {
+					m, _ = m.updateMonitoring(msg)
+				}
 			case 1: // Allowed Domains tab
 				m, _ = m.updateAllowedDomains(msg)
 			case 2: // Settings tab
@@ -345,59 +461,21 @@ func (m Model) updateMonitoring(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case "up", "k":
 		if len(m.monitoring.dnsQueries) > 0 {
-			// Calculate visible range
-			availableHeight := m.height - 12
-			if availableHeight < 1 {
-				availableHeight = 1
-			}
-			startIndex := 0
-			endIndex := len(m.monitoring.dnsQueries)
-			if len(m.monitoring.dnsQueries) > availableHeight {
-				startIndex = len(m.monitoring.dnsQueries) - availableHeight
-				endIndex = len(m.monitoring.dnsQueries)
-			}
-
-			// Calculate visible position (0-based index within visible items)
-			visibleIndex := m.monitoring.tableCursor - startIndex
-			visibleCount := endIndex - startIndex
-
-			// Wrap around within visible range
-			if visibleIndex <= 0 {
-				visibleIndex = visibleCount - 1
+			// Simple up navigation with wrapping
+			if m.monitoring.tableCursor > 0 {
+				m.monitoring.tableCursor--
 			} else {
-				visibleIndex--
+				m.monitoring.tableCursor = len(m.monitoring.dnsQueries) - 1
 			}
-
-			// Map back to dataset index
-			m.monitoring.tableCursor = startIndex + visibleIndex
 		}
 	case "down", "j":
 		if len(m.monitoring.dnsQueries) > 0 {
-			// Calculate visible range
-			availableHeight := m.height - 12
-			if availableHeight < 1 {
-				availableHeight = 1
-			}
-			startIndex := 0
-			endIndex := len(m.monitoring.dnsQueries)
-			if len(m.monitoring.dnsQueries) > availableHeight {
-				startIndex = len(m.monitoring.dnsQueries) - availableHeight
-				endIndex = len(m.monitoring.dnsQueries)
-			}
-
-			// Calculate visible position (0-based index within visible items)
-			visibleIndex := m.monitoring.tableCursor - startIndex
-			visibleCount := endIndex - startIndex
-
-			// Wrap around within visible range
-			if visibleIndex >= visibleCount-1 {
-				visibleIndex = 0
+			// Simple down navigation with wrapping
+			if m.monitoring.tableCursor < len(m.monitoring.dnsQueries)-1 {
+				m.monitoring.tableCursor++
 			} else {
-				visibleIndex++
+				m.monitoring.tableCursor = 0
 			}
-
-			// Map back to dataset index
-			m.monitoring.tableCursor = startIndex + visibleIndex
 		}
 	case "enter", " ":
 		if len(m.monitoring.dnsQueries) > 0 && m.monitoring.tableCursor < len(m.monitoring.dnsQueries) {
@@ -430,12 +508,20 @@ func (m Model) updateSettings(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "up", "k":
 		if m.settings.editingField == -1 {
 			// Not editing, navigate between fields
-			m.settings.cursor = max(m.settings.cursor-1, 0)
+			if m.settings.cursor > 0 {
+				m.settings.cursor--
+			} else {
+				m.settings.cursor = 2 // Wrap to last option
+			}
 		}
 	case "down", "j":
 		if m.settings.editingField == -1 {
 			// Not editing, navigate between fields
-			m.settings.cursor = min(m.settings.cursor+1, 2) // 0=resolver1, 1=resolver2, 2=save
+			if m.settings.cursor < 2 {
+				m.settings.cursor++
+			} else {
+				m.settings.cursor = 0 // Wrap to first option
+			}
 		}
 	case "enter":
 		if m.settings.editingField == -1 {
@@ -492,59 +578,21 @@ func (m Model) updateAllowedDomains(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case "up", "k":
 		if len(m.monitoring.allowlist) > 0 {
-			// Calculate visible range
-			availableHeight := m.height - 12
-			if availableHeight < 1 {
-				availableHeight = 1
-			}
-			startIndex := 0
-			endIndex := len(m.monitoring.allowlist)
-			if len(m.monitoring.allowlist) > availableHeight {
-				startIndex = len(m.monitoring.allowlist) - availableHeight
-				endIndex = len(m.monitoring.allowlist)
-			}
-
-			// Calculate visible position (0-based index within visible items)
-			visibleIndex := m.allowedDomains.cursor - startIndex
-			visibleCount := endIndex - startIndex
-
-			// Wrap around within visible range
-			if visibleIndex <= 0 {
-				visibleIndex = visibleCount - 1
+			// Simple up navigation with wrapping
+			if m.allowedDomains.cursor > 0 {
+				m.allowedDomains.cursor--
 			} else {
-				visibleIndex--
+				m.allowedDomains.cursor = len(m.monitoring.allowlist) - 1
 			}
-
-			// Map back to dataset index
-			m.allowedDomains.cursor = startIndex + visibleIndex
 		}
 	case "down", "j":
 		if len(m.monitoring.allowlist) > 0 {
-			// Calculate visible range
-			availableHeight := m.height - 12
-			if availableHeight < 1 {
-				availableHeight = 1
-			}
-			startIndex := 0
-			endIndex := len(m.monitoring.allowlist)
-			if len(m.monitoring.allowlist) > availableHeight {
-				startIndex = len(m.monitoring.allowlist) - availableHeight
-				endIndex = len(m.monitoring.allowlist)
-			}
-
-			// Calculate visible position (0-based index within visible items)
-			visibleIndex := m.allowedDomains.cursor - startIndex
-			visibleCount := endIndex - startIndex
-
-			// Wrap around within visible range
-			if visibleIndex >= visibleCount-1 {
-				visibleIndex = 0
+			// Simple down navigation with wrapping
+			if m.allowedDomains.cursor < len(m.monitoring.allowlist)-1 {
+				m.allowedDomains.cursor++
 			} else {
-				visibleIndex++
+				m.allowedDomains.cursor = 0
 			}
-
-			// Map back to dataset index
-			m.allowedDomains.cursor = startIndex + visibleIndex
 		}
 	case "enter", " ":
 		if len(m.monitoring.allowlist) > 0 && m.allowedDomains.cursor < len(m.monitoring.allowlist) {
@@ -575,7 +623,13 @@ func (m Model) renderTabs() string {
 	var renderedTabs []string
 
 	for i, t := range m.tabs {
-		if i == m.activeTab {
+		// Disable monitoring tab when focus mode is active
+		if m.focusModeActive && i == 0 { // Monitoring tab
+			disabledStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#666666")). // Grayed out
+				Strikethrough(true)
+			renderedTabs = append(renderedTabs, disabledStyle.Render(t))
+		} else if i == m.activeTab {
 			renderedTabs = append(renderedTabs, activeTabStyle.Render(t))
 		} else {
 			renderedTabs = append(renderedTabs, tabStyle.Render(t))
@@ -623,8 +677,28 @@ func (m Model) View() string {
 		contentHeight = 5
 	}
 
-	// Always render header with full height to prevent jiggling
-	header := headerStyle.Width(m.width).Height(headerHeight).Align(lipgloss.Center).Render(bannerText)
+	// Add focus mode indicator to header if active
+	var header string
+	if m.focusModeActive {
+		focusIndicator := lipgloss.NewStyle().
+			Background(lipgloss.Color("#FF6B6B")). // Red background
+			Foreground(lipgloss.Color("#FFFFFF")). // White text
+			Bold(true).
+			Padding(0, 1).
+			Render("🔒 FOCUS MODE ACTIVE")
+
+		// Combine banner with focus indicator
+		headerContent := bannerText + "\n" + focusIndicator
+
+		// Use red-tinted header style for focus mode
+		focusHeaderStyle := headerStyle.Copy().
+			Background(lipgloss.Color("#2D1B1B")). // Dark red background
+			Foreground(lipgloss.Color("#FF6B6B"))  // Red text
+		header = focusHeaderStyle.Width(m.width).Height(headerHeight).Align(lipgloss.Center).Render(headerContent)
+	} else {
+		// Always render header with full height to prevent jiggling
+		header = headerStyle.Width(m.width).Height(headerHeight).Align(lipgloss.Center).Render(bannerText)
+	}
 
 	// Render tabs
 	tabs := m.renderTabs()
@@ -633,7 +707,20 @@ func (m Model) View() string {
 	contentText := "No content available"
 	if m.activeTab < len(m.tabs) {
 		if m.activeTab == 0 { // Monitoring tab
-			contentText = m.renderDNSMonitoring()
+			if m.focusModeActive {
+				contentText = `
+🔒 FOCUS MODE ACTIVE
+
+Monitoring is disabled during focus mode.
+
+DNS monitoring is temporarily disabled to help you stay focused.
+
+You can still manage your allowlist and configure settings.
+
+Press ←/→ to switch to other tabs.`
+			} else {
+				contentText = m.renderDNSMonitoring()
+			}
 		} else if m.activeTab == 1 { // Allowed Domains tab
 			contentText = m.renderAllowedDomains()
 		} else if m.activeTab == 2 { // Settings tab
@@ -641,6 +728,18 @@ func (m Model) View() string {
 		} else if m.activeTab == 3 { // About tab
 			contentText = m.renderHelp()
 		}
+	}
+
+	// Show temporary focus message if present
+	if m.focusMessage != "" {
+		messageStyle := lipgloss.NewStyle().
+			Background(lipgloss.Color("#4ADE80")). // Green background
+			Foreground(lipgloss.Color("#FFFFFF")). // White text
+			Bold(true).
+			Padding(1, 2).
+			Align(lipgloss.Center)
+
+		contentText = messageStyle.Render(m.focusMessage) + "\n\n" + contentText
 	}
 
 	// Truncate content if it's too long to prevent layout shifts
@@ -653,13 +752,17 @@ func (m Model) View() string {
 	content := contentStyle.Width(m.width - 2).Height(contentHeight).Render(contentText)
 
 	// Footer - pink bar like in screenshot
-	footerText := "q: Quit • h: Help • t: Toggle Focus • ←/→: Switch Tabs"
+	footerText := "q: Quit • f: Focus Mode (1h) • ←/→: Switch Tabs"
 	if m.activeTab == 0 {
-		footerText = "↑/↓: Navigate • Space/Enter: Toggle Allow/Block • q: Quit • ←/→: Switch Tabs"
+		if m.focusModeActive {
+			footerText = "🔒 Monitoring disabled in focus mode • f: Focus Mode (1h) • q: Quit • ←/→: Switch Tabs"
+		} else {
+			footerText = "↑/↓: Navigate • Space/Enter: Toggle Allow/Block • f: Focus Mode (1h) • q: Quit • ←/→: Switch Tabs"
+		}
 	} else if m.activeTab == 1 {
-		footerText = "↑/↓: Navigate • Space/Enter: Remove Domain • q: Quit • ←/→: Switch Tabs"
+		footerText = "↑/↓: Navigate • Space/Enter: Remove Domain • f: Focus Mode (1h) • q: Quit • ←/→: Switch Tabs"
 	} else if m.activeTab == 2 {
-		footerText = "↑/↓: Navigate • Enter: Edit/Save • Escape: Cancel • q: Quit • ←/→: Switch Tabs"
+		footerText = "↑/↓: Navigate • Enter: Edit/Save • Escape: Cancel • f: Focus Mode (1h) • q: Quit • ←/→: Switch Tabs"
 	}
 	footer := footerStyle.Width(m.width).Render(footerText)
 
@@ -681,32 +784,24 @@ func (m Model) renderDNSMonitoring() string {
 		return "No DNS queries recorded yet.\n\nStart the DNS resolver to see real-time data."
 	}
 
-	// Calculate available space for table
-	// Reserve space for: header (1) + separator (1) + summary (1) + some padding
-	availableHeight := m.height - 12 // More conservative space reservation
+	// Ensure cursor is within bounds
+	if m.monitoring.tableCursor >= len(m.monitoring.dnsQueries) {
+		m.monitoring.tableCursor = len(m.monitoring.dnsQueries) - 1
+	}
+	if m.monitoring.tableCursor < 0 {
+		m.monitoring.tableCursor = 0
+	}
 
-	// Limit the number of rows to display
+	// Calculate available space for table
+	availableHeight := m.height - 12
 	maxRows := availableHeight
 	if maxRows < 1 {
 		maxRows = 1
 	}
 
-	// Just show the most recent items that fit on screen
+	// Show all items, but limit display height
 	startIndex := 0
 	endIndex := len(m.monitoring.dnsQueries)
-	if len(m.monitoring.dnsQueries) > maxRows {
-		// Show the most recent items
-		startIndex = len(m.monitoring.dnsQueries) - maxRows
-		endIndex = len(m.monitoring.dnsQueries)
-	}
-
-	// Adjust cursor to be within the visible range
-	if m.monitoring.tableCursor < startIndex {
-		m.monitoring.tableCursor = startIndex
-	}
-	if m.monitoring.tableCursor >= endIndex {
-		m.monitoring.tableCursor = endIndex - 1
-	}
 
 	// Create table header with proper alignment
 	header := lipgloss.NewStyle().
@@ -775,6 +870,7 @@ Usage:
 • Press ←/→ to switch between tabs
 • Use ↑/↓ to navigate the monitoring table
 • Press Space/Enter to toggle allow/block status
+• Press f to enable focus mode for 1 hour
 • Press q to quit
 
 For more information, visit: https://github.com/berbyte/sinkzone
@@ -819,10 +915,10 @@ func (m Model) renderSettings() string {
 
 	// Render form
 	var form strings.Builder
-	form.WriteString("Upstream DNS Resolvers\n\n")
+	form.WriteString("Upstream DNS Resolvers (IP addresses)\n\n")
 
 	// Resolver 1
-	form.WriteString(labelStyle.Render("Primary Resolver:"))
+	form.WriteString(labelStyle.Render("Primary Resolver IP:"))
 	form.WriteString("\n")
 	if m.settings.cursor == 0 {
 		form.WriteString(selectedInputStyle.Render(m.settings.resolver1Input))
@@ -832,7 +928,7 @@ func (m Model) renderSettings() string {
 	form.WriteString("\n\n")
 
 	// Resolver 2
-	form.WriteString(labelStyle.Render("Secondary Resolver:"))
+	form.WriteString(labelStyle.Render("Secondary Resolver IP:"))
 	form.WriteString("\n")
 	if m.settings.cursor == 1 {
 		form.WriteString(selectedInputStyle.Render(m.settings.resolver2Input))
@@ -856,26 +952,12 @@ func (m Model) renderAllowedDomains() string {
 		return "No domains in allowlist.\n\nAdd domains from the Monitoring tab by pressing Space/Enter on blocked domains."
 	}
 
-	// Calculate available height for the list
-	availableHeight := m.height - 12
-	if availableHeight < 1 {
-		availableHeight = 1
+	// Ensure cursor is within bounds
+	if m.allowedDomains.cursor >= len(m.monitoring.allowlist) {
+		m.allowedDomains.cursor = len(m.monitoring.allowlist) - 1
 	}
-
-	// Determine which domains to show
-	startIndex := 0
-	endIndex := len(m.monitoring.allowlist)
-	if len(m.monitoring.allowlist) > availableHeight {
-		startIndex = len(m.monitoring.allowlist) - availableHeight
-		endIndex = len(m.monitoring.allowlist)
-	}
-
-	// Adjust cursor to be within the visible range
-	if m.allowedDomains.cursor < startIndex {
-		m.allowedDomains.cursor = startIndex
-	}
-	if m.allowedDomains.cursor >= endIndex {
-		m.allowedDomains.cursor = endIndex - 1
+	if m.allowedDomains.cursor < 0 {
+		m.allowedDomains.cursor = 0
 	}
 
 	// Use the same styles as monitoring tab
@@ -892,8 +974,7 @@ func (m Model) renderAllowedDomains() string {
 
 	// Render domain list with consistent table format
 	var rows []string
-	for i := startIndex; i < endIndex; i++ {
-		domain := m.monitoring.allowlist[i]
+	for i, domain := range m.monitoring.allowlist {
 		isSelected := (i == m.allowedDomains.cursor)
 
 		// Use the same row formatting as monitoring tab

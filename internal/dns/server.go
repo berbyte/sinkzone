@@ -14,9 +14,12 @@ import (
 )
 
 type Server struct {
-	config *config.Config
-	server *dns.Server
-	db     *database.Database
+	config       *config.Config
+	server       *dns.Server
+	db           *database.Database
+	stateMgr     *config.StateManager
+	stateChan    chan config.State
+	currentState config.State
 }
 
 func NewServer(cfg *config.Config) *Server {
@@ -36,6 +39,22 @@ func (s *Server) Start() error {
 	s.db = db
 	defer s.db.Close()
 
+	// Initialize state manager
+	stateMgr, err := config.NewStateManager()
+	if err != nil {
+		return fmt.Errorf("failed to initialize state manager: %w", err)
+	}
+	s.stateMgr = stateMgr
+
+	// Initialize state channel
+	s.stateChan = make(chan config.State, 10)
+
+	// Start state watching
+	s.stateMgr.WatchState(s.stateChan)
+
+	// Start state update goroutine
+	go s.handleStateUpdates()
+
 	// Create PID file
 	if err := s.createPIDFile(); err != nil {
 		return fmt.Errorf("failed to create PID file: %w", err)
@@ -51,6 +70,19 @@ func (s *Server) Start() error {
 
 	log.Printf("Starting DNS server on :53")
 	return s.server.ListenAndServe()
+}
+
+// handleStateUpdates processes state updates from the state manager
+func (s *Server) handleStateUpdates() {
+	for state := range s.stateChan {
+		s.currentState = state
+
+		if state.FocusMode {
+			log.Printf("Focus mode ENABLED (until %s)", state.FocusEndTime.Format("15:04:05"))
+		} else {
+			log.Printf("Focus mode DISABLED")
+		}
+	}
 }
 
 func (s *Server) createPIDFile() error {
@@ -88,39 +120,74 @@ func (s *Server) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 	msg := dns.Msg{}
 	msg.SetReply(r)
 
-	// Check if we're in focus mode
-	if s.config.Mode == "focus" {
-		// Check if focus mode has expired
-		if s.config.FocusEndTime != nil && time.Now().After(*s.config.FocusEndTime) {
-			s.config.Mode = "normal"
-			s.config.FocusEndTime = nil
-			if err := config.Save(s.config); err != nil {
-				log.Printf("Failed to update expired focus mode: %v", err)
-			}
-		}
-	}
-
 	// Get the domain being requested
 	domain := ""
 	if len(r.Question) > 0 {
 		domain = strings.TrimSuffix(r.Question[0].Name, ".")
 	}
 
+	// Check if we're in focus mode
+	focusMode := s.currentState.FocusMode
+
+	// Check for expiration
+	if focusMode && s.currentState.FocusEndTime != nil && time.Now().After(*s.currentState.FocusEndTime) {
+		// Focus mode has expired, disable it
+		if err := s.stateMgr.SetFocusMode(false, 0); err != nil {
+			log.Printf("Failed to disable expired focus mode: %v", err)
+		}
+		focusMode = false
+	}
+
 	// Log the request and record in database
 	if domain != "" {
-		blocked := s.config.Mode == "focus" && !s.isAllowed(domain)
+		blocked := focusMode && !s.isAllowed(domain)
 		if err := s.db.RecordDNSQuery(domain, blocked); err != nil {
 			log.Printf("Failed to record DNS query: %v", err)
 		}
-		log.Printf("DNS request: %s (mode: %s)", domain, s.config.Mode)
+
+		// Check if domain is in allowlist for logging purposes
+		isAllowed := s.isAllowed(domain)
+
+		if focusMode {
+			if blocked {
+				log.Printf("BLOCKED: %s (focus mode active)", domain)
+			} else {
+				log.Printf("ALLOWED: %s (in allowlist)", domain)
+			}
+		} else {
+			// In normal mode, show what would happen if focus mode were active
+			if isAllowed {
+				log.Printf("DNS request: %s (normal mode) - would be ALLOWED in focus mode", domain)
+			} else {
+				log.Printf("DNS request: %s (normal mode) - would be BLOCKED in focus mode", domain)
+			}
+		}
 	}
 
 	// If in focus mode, check allowlist
-	if s.config.Mode == "focus" {
+	if focusMode {
 		if !s.isAllowed(domain) {
-			log.Printf("Blocked: %s", domain)
 			// Return NXDOMAIN for blocked domains
 			msg.SetRcode(r, dns.RcodeNameError)
+
+			// Add SOA record for negative response with 5-minute TTL
+			soa := &dns.SOA{
+				Hdr: dns.RR_Header{
+					Name:   r.Question[0].Name,
+					Rrtype: dns.TypeSOA,
+					Class:  dns.ClassINET,
+					Ttl:    300, // 5 minutes
+				},
+				Ns:      "sinkzone.local.",
+				Mbox:    "admin.sinkzone.local.",
+				Serial:  uint32(time.Now().Unix()),
+				Refresh: 300,
+				Retry:   300,
+				Expire:  300,
+				Minttl:  300,
+			}
+			msg.Ns = append(msg.Ns, soa)
+
 			w.WriteMsg(&msg)
 			return
 		}
@@ -143,7 +210,7 @@ func (s *Server) forward(r *dns.Msg) (*dns.Msg, error) {
 		Timeout: 5 * time.Second,
 	}
 
-	for _, upstream := range s.config.UpstreamNameservers {
+	for _, upstream := range s.config.GetUpstreamAddresses() {
 		response, _, err := client.Exchange(r, upstream)
 		if err == nil {
 			return response, nil

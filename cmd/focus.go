@@ -19,23 +19,20 @@ var focusCmd = &cobra.Command{
 			return fmt.Errorf("invalid duration format: %w", err)
 		}
 
-		// Load current config
-		cfg, err := config.Load()
+		// Initialize state manager
+		stateMgr, err := config.NewStateManager()
 		if err != nil {
-			return fmt.Errorf("failed to load config: %w", err)
+			return fmt.Errorf("failed to initialize state manager: %w", err)
 		}
 
-		// Set focus mode
-		cfg.Mode = "focus"
+		// Enable focus mode with duration
+		if err := stateMgr.SetFocusMode(true, duration); err != nil {
+			return fmt.Errorf("failed to enable focus mode: %w", err)
+		}
+
 		endTime := time.Now().Add(duration)
-		cfg.FocusEndTime = &endTime
-
-		// Save config
-		if err := config.Save(cfg); err != nil {
-			return fmt.Errorf("failed to save config: %w", err)
-		}
-
-		fmt.Printf("Focus mode activated for %s (until %s)\n", duration, cfg.FocusEndTime.Format("15:04:05"))
+		fmt.Printf("Focus mode activated for %s (until %s)\n", duration, endTime.Format("15:04:05"))
+		fmt.Printf("DNS resolver will block non-allowlisted domains immediately.\n")
 		return nil
 	},
 }
