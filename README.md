@@ -27,13 +27,13 @@
 
 Sinkzone is a DNS-based productivity tool that helps you stay focused by blocking distracting websites at the DNS level. When you enable focus mode, only domains in your allowlist will resolve - everything else returns NXDOMAIN.
 
-### My Story:
+## Why I Built This:
 
 I constantly found myself getting interrupted by notifications from Slack and email during coding sessions - losing hours of productive time. I built Sinkzone to force myself into deep focus mode. Now I can code for hours without distractions.
 
 My son uses it on his Windows box during his chess training sessions to stay focused without getting sidetracked.
 
-**Sinkzone is built to solve our problem.**
+**Sinkzone is built to solve our problems.**
 
 <hr />
 
