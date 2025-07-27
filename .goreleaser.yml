@@ -76,7 +76,6 @@ brews:
       email: actions@github.com
     url_template: "https://github.com/berbyte/sinkzone/releases/download/v{{ .Version }}/{{ .ArtifactName }}"
     commit_msg_template: "Update {{ .ProjectName }} to v{{ .Version }}"
-    path: "Formula/sinkzone.rb"
 
 release:
   name_template: 'v{{ .Version }}'
