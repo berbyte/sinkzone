@@ -1,32 +1,10 @@
 <a id="readme-top"></a>
-
-<div align="center">
-  <img src="https://share.ber.sh/sinkzone-splash.png" alt="Sinkzone: DNS-based Productivity Tool" width="600">
-  <h1 align="center">Sinkzone: DNS-based Productivity Tool</h1>
-  <p align="center">
-    Stay focused by blocking distractions at the DNS level.
-    <br /><br />
-    <a href="#what-is-sinkzone"><strong>Learn More »</strong></a>
-    &middot;
-    <a href="#quick-start">Quick Start</a>
-    &middot;
-    <a href="https://github.com/berbyte/sinkzone/issues/new">Report a Bug</a>
-    &middot;
-    <a href="#usage">Usage Guide</a>
-  </p>
-
-  <p align="center">
-    <a href="https://golang.org"><img src="https://img.shields.io/badge/Go-1.24+-blue.svg" alt="Go Version" /></a>
-    <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License" /></a>
-    <a href="https://github.com/berbyte/sinkzone/releases"><img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg" alt="Platform" /></a>
-  </p>
-</div>
-
 ---
 
 <details>
 <summary><b>📚 Table of Contents</b></summary>
 
+- [](#)
 - [What is Sinkzone?](#what-is-sinkzone)
 - [Motivation](#motivation)
 - [Key Features](#key-features)
@@ -52,6 +30,30 @@
 - [Contact](#contact)
 
 </details>
+
+<div align="center">
+  <img src="https://share.ber.sh/sinkzone-splash.png" alt="Sinkzone: DNS-based Productivity Tool" width="600">
+  <h1 align="center">Sinkzone: DNS-based Productivity Tool</h1>
+  <p align="center">
+    Stay focused by blocking distractions at the DNS level.
+    <br /><br />
+    <a href="#what-is-sinkzone"><strong>Learn More »</strong></a>
+    &middot;
+    <a href="#quick-start">Quick Start</a>
+    &middot;
+    <a href="https://github.com/berbyte/sinkzone/issues/new">Report a Bug</a>
+    &middot;
+    <a href="#usage">Usage Guide</a>
+  </p>
+
+  <p align="center">
+    <a href="https://golang.org"><img src="https://img.shields.io/badge/Go-1.24+-blue.svg" alt="Go Version" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License" /></a>
+    <a href="https://github.com/berbyte/sinkzone/releases"><img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg" alt="Platform" /></a>
+  </p>
+</div>
+
+
 
 ---
 
