@@ -59,20 +59,19 @@
 
 
 ---
-
 ## What is Sinkzone?
 
-Sinkzone is a local DNS resolver and terminal UI (TUI) that helps you eliminate distractions and get deep work done. It blocks all domains except those you explicitly allow. This ensures that notifications, news, social media, and other time-sinks are unreachable at the network level — not just in your browser.
+Sinkzone is a local DNS resolver and terminal UI (TUI) that helps you eliminate distractions and get deep work done. It blocks all domains by default — only the ones you explicitly allow can get through. This means notifications, social media, news, and other time-sinks are unreachable at the network level — not just in your browser.
 
 It’s lightweight, cross-platform, and built for hackers, makers, and anyone serious about focus.
 
----
-
 ## Motivation
 
-I built Sinkzone out of necessity. Every coding session was interrupted by Slack pings, email alerts. I needed something stronger than browser extensions — a real system-level kill switch for distractions.
+Most tools make you list what you want to block. But the internet is infinite — that list never ends. It’s much easier to list the few things you actually want to allow.
 
-Now I can code for hours uninterrupted. Even my son uses Sinkzone during chess practice to keep his focus.
+Sinkzone was born from that insight. I was tired of coding sessions interrupted by Slack pings and email alerts. I needed something stronger than a browser plugin — a system-level kill switch for distractions.
+
+Now I can code for hours uninterrupted. Even my son uses Sinkzone during chess practice to stay focused.
 
 **Sinkzone exists because I needed it. Maybe you do too.**
 

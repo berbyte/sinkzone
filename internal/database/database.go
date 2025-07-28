@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -14,6 +15,41 @@ import (
 func init() {
 	// Ensure the SQLite driver is registered
 	_ = sql.Drivers()
+}
+
+// isBusyError checks if the error is a SQLite busy error
+func isBusyError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "database is locked") ||
+		strings.Contains(errStr, "SQLITE_BUSY") ||
+		strings.Contains(errStr, "database is busy")
+}
+
+// retryWithBackoff executes a database operation with retry logic
+func retryWithBackoff(operation func() error, maxRetries int) error {
+	backoff := 10 * time.Millisecond
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		err := operation()
+		if err == nil {
+			return nil
+		}
+
+		if isBusyError(err) && attempt < maxRetries-1 {
+			// Exponential backoff
+			time.Sleep(backoff)
+			backoff *= 2
+			continue
+		}
+
+		// If it's not a busy error or we've exhausted retries, return the error
+		return err
+	}
+
+	return fmt.Errorf("operation failed after %d retries", maxRetries)
 }
 
 type Database struct {
@@ -49,6 +85,16 @@ func New(dbPath string) (*Database, error) {
 	// Enable WAL mode for better concurrency
 	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
 		return nil, fmt.Errorf("failed to enable WAL mode: %w", err)
+	}
+
+	// Set busy timeout to handle concurrent access
+	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
+		return nil, fmt.Errorf("failed to set busy timeout: %w", err)
+	}
+
+	// Enable foreign keys
+	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
+		return nil, fmt.Errorf("failed to enable foreign keys: %w", err)
 	}
 
 	// Create tables if they don't exist
@@ -180,23 +226,25 @@ func (d *Database) Close() error {
 	return d.db.Close()
 }
 
-// RecordDNSQuery records a DNS query in the database
+// RecordDNSQuery records a DNS query in the database with retry logic
 func (d *Database) RecordDNSQuery(domain string, blocked bool) error {
 	now := time.Now().Format(time.RFC3339Nano)
-	_, err := d.db.Exec(`
-		INSERT INTO dns_queries (domain, timestamp, blocked, count)
-		VALUES (?, ?, ?, 1)
-		ON CONFLICT(domain) DO UPDATE SET
-			timestamp = ?,
-			blocked = ?,
-			count = count + 1
-	`, domain, now, blocked, now, blocked)
 
-	if err != nil {
-		return fmt.Errorf("failed to record DNS query: %w", err)
-	}
+	return retryWithBackoff(func() error {
+		_, err := d.db.Exec(`
+			INSERT INTO dns_queries (domain, timestamp, blocked, count)
+			VALUES (?, ?, ?, 1)
+			ON CONFLICT(domain) DO UPDATE SET
+				timestamp = ?,
+				blocked = ?,
+				count = count + 1
+		`, domain, now, blocked, now, blocked)
 
-	return nil
+		if err != nil {
+			return fmt.Errorf("failed to record DNS query: %w", err)
+		}
+		return nil
+	}, 5)
 }
 
 // GetDNSStats returns DNS statistics as a slice
@@ -256,29 +304,31 @@ func (d *Database) GetDNSStats() ([]DNSQuery, error) {
 
 // AddToAllowlist adds a domain to the allowlist
 func (d *Database) AddToAllowlist(domain string) error {
-	_, err := d.db.Exec(`
-		INSERT OR REPLACE INTO allowlist (domain, added_at, is_active)
-		VALUES (?, ?, 1)
-	`, domain, time.Now())
+	return retryWithBackoff(func() error {
+		_, err := d.db.Exec(`
+			INSERT OR REPLACE INTO allowlist (domain, added_at, is_active)
+			VALUES (?, ?, 1)
+		`, domain, time.Now())
 
-	if err != nil {
-		return fmt.Errorf("failed to add domain to allowlist: %w", err)
-	}
-
-	return nil
+		if err != nil {
+			return fmt.Errorf("failed to add domain to allowlist: %w", err)
+		}
+		return nil
+	}, 3)
 }
 
 // RemoveFromAllowlist removes a domain from the allowlist
 func (d *Database) RemoveFromAllowlist(domain string) error {
-	_, err := d.db.Exec(`
-		UPDATE allowlist SET is_active = 0 WHERE domain = ?
-	`, domain)
+	return retryWithBackoff(func() error {
+		_, err := d.db.Exec(`
+			UPDATE allowlist SET is_active = 0 WHERE domain = ?
+		`, domain)
 
-	if err != nil {
-		return fmt.Errorf("failed to remove domain from allowlist: %w", err)
-	}
-
-	return nil
+		if err != nil {
+			return fmt.Errorf("failed to remove domain from allowlist: %w", err)
+		}
+		return nil
+	}, 3)
 }
 
 // GetAllowlist returns all active domains in the allowlist
