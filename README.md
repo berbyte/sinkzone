@@ -24,9 +24,9 @@
 
 ---
 
-## 📚 Table of Contents
+<details>
+<summary><b>📚 Table of Contents</b></summary>
 
-- [📚 Table of Contents](#-table-of-contents)
 - [What is Sinkzone?](#what-is-sinkzone)
 - [Motivation](#motivation)
 - [Key Features](#key-features)
@@ -50,6 +50,8 @@
 - [Development](#development)
 - [License](#license)
 - [Contact](#contact)
+
+</details>
 
 ---
 
@@ -249,7 +251,7 @@ MIT License. See the [LICENSE](LICENSE) file for full details.
 
 ## Contact
 
-* Email: [github@ber.run](mailto:github@ber.run)
+* Email: [dominis@ber.run](mailto:dominis@ber.run)
 * GitHub: [github.com/berbyte/sinkzone](https://github.com/berbyte/sinkzone)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
