@@ -69,7 +69,7 @@ brews:
     description: "A strict DNS filter to help you stay focused — or keep your kids safe"
     repository:
       owner: berbyte
-      name: homebrew-tap
+      name: sinkzone
       branch: main
     commit_author:
       name: GitHub Actions

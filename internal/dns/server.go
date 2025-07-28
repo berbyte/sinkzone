@@ -11,6 +11,7 @@ import (
 	"github.com/berbyte/sinkzone/internal/config"
 	"github.com/berbyte/sinkzone/internal/database"
 	"github.com/miekg/dns"
+	_ "modernc.org/sqlite"
 )
 
 type Server struct {

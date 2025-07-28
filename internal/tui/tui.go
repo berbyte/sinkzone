@@ -226,6 +226,21 @@ func Start() error {
 	// Initialize focus mode status
 	m.updateFocusModeStatus()
 
+	// Load initial data for monitoring tab
+	if db != nil {
+		// Load initial DNS queries
+		initialQueries, err := db.GetDNSStats()
+		if err == nil {
+			m.monitoring.dnsQueries = initialQueries
+		}
+
+		// Load initial allowlist
+		allowlist, err := db.GetAllowlist()
+		if err == nil {
+			m.monitoring.allowlist = allowlist
+		}
+	}
+
 	// If focus mode is active, start on allowed domains tab instead of monitoring
 	if m.focusModeActive {
 		m.activeTab = 1 // Start on Allowed Domains tab
@@ -291,11 +306,12 @@ func (m Model) updateFocusModeStatus() {
 	m.focusModeActive = state.FocusMode
 	m.focusEndTime = state.FocusEndTime
 
-	// If focus mode is active and we're on the monitoring tab, switch to allowed domains tab
+	// Only switch tabs if focus mode just became active and we're on monitoring tab
+	// Don't switch tabs if focus mode is already active or if we're not on monitoring tab
 	if m.focusModeActive && m.activeTab == 0 {
-		m.activeTab = 1 // Switch to Allowed Domains tab
+		// Check if this is a new focus mode activation (not just a status check)
+		// We'll handle this in the key handler instead of here
 	}
-
 }
 
 // checkAndRestoreTerminal ensures the terminal is in a proper state
@@ -362,6 +378,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if err == nil {
 					m.monitoring.allowlist = allowlist
 				}
+			} else {
+				// If no database, still update the refresh time to prevent errors
+				m.monitoring.lastRefresh = time.Now()
 			}
 
 			// Check focus mode status
@@ -391,15 +410,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				// Immediately update focus mode status in TUI
 				m.updateFocusModeStatus()
+				// If we're on monitoring tab, switch to allowed domains tab
+				if m.activeTab == 0 {
+					m.activeTab = 1
+				}
 				// Show temporary success message
 				m.focusMessage = "🔒 Focus mode activated for 1 hour!"
 				m.focusMessageTime = time.Now()
-			}
-		case "space", "enter":
-			// Disable space/enter in monitoring tab when focus mode is active
-			if m.activeTab == 0 && m.focusModeActive {
-				// Do nothing - prevent allowing/blocking domains during focus mode
-				return m, nil
 			}
 		case "left", "h":
 			// Navigate to previous tab
@@ -785,11 +802,13 @@ func (m Model) renderDNSMonitoring() string {
 	}
 
 	// Ensure cursor is within bounds
-	if m.monitoring.tableCursor >= len(m.monitoring.dnsQueries) {
-		m.monitoring.tableCursor = len(m.monitoring.dnsQueries) - 1
-	}
-	if m.monitoring.tableCursor < 0 {
-		m.monitoring.tableCursor = 0
+	if len(m.monitoring.dnsQueries) > 0 {
+		if m.monitoring.tableCursor >= len(m.monitoring.dnsQueries) {
+			m.monitoring.tableCursor = len(m.monitoring.dnsQueries) - 1
+		}
+		if m.monitoring.tableCursor < 0 {
+			m.monitoring.tableCursor = 0
+		}
 	}
 
 	// Calculate available space for table

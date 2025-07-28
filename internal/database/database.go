@@ -11,6 +11,11 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+func init() {
+	// Ensure the SQLite driver is registered
+	_ = sql.Drivers()
+}
+
 type Database struct {
 	db *sql.DB
 }
@@ -36,7 +41,7 @@ func New(dbPath string) (*Database, error) {
 		return nil, fmt.Errorf("failed to create database directory: %w", err)
 	}
 
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
@@ -278,9 +283,10 @@ func (d *Database) RemoveFromAllowlist(domain string) error {
 
 // GetAllowlist returns all active domains in the allowlist
 func (d *Database) GetAllowlist() ([]string, error) {
+	// Try a more explicit query that should work with modernc.org/sqlite
 	rows, err := d.db.Query(`
 		SELECT domain FROM allowlist 
-		WHERE is_active = 1 
+		WHERE is_active IS NOT NULL AND is_active != 0
 		ORDER BY domain
 	`)
 	if err != nil {
@@ -306,7 +312,7 @@ func (d *Database) IsInAllowlist(domain string) (bool, error) {
 	var count int
 	err := d.db.QueryRow(`
 		SELECT COUNT(*) FROM allowlist 
-		WHERE domain = ? AND is_active = 1
+		WHERE domain = ? AND is_active IS NOT NULL AND is_active != 0
 	`, domain).Scan(&count)
 
 	if err != nil {
