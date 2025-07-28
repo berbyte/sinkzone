@@ -21,9 +21,13 @@
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License" /></a>
     <a href="https://github.com/berbyte/sinkzone/releases"><img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg" alt="Platform" /></a>
   </p>
-  <details>
   
-  <summary><b>📚 Table of Contents</b></summary>
+</div>
+
+---
+
+<details>
+<summary><b>📚 Table of Contents</b></summary>
 
 - [](#)
 - [What is Sinkzone?](#what-is-sinkzone)
@@ -49,7 +53,8 @@
 - [Development](#development)
 - [License](#license)
 - [Contact](#contact)
-</div>
+
+</details>
 
 
 
