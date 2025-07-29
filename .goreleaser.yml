@@ -72,7 +72,8 @@ homebrew_casks:
       name: goreleaserbot
       email: bot@goreleaser.com
     directory: "Formula"
-    url_template: "https://github.com/berbyte/sinkzone/releases/download/v{{ .Version }}/{{ .ArtifactName }}"
+    url:
+      template: "https://github.com/berbyte/sinkzone/releases/download/v{{ .Version }}/{{ .ArtifactName }}"
     commit_msg_template: "Update {{ .ProjectName }} to v{{ .Version }}"
 
 
