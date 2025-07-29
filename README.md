@@ -29,6 +29,7 @@
 <details>
 <summary><b>📚 Table of Contents</b></summary>
 
+
 - [](#)
 - [What is Sinkzone?](#what-is-sinkzone)
 - [Motivation](#motivation)
@@ -79,11 +80,11 @@ Now I can code for hours uninterrupted. Even my son uses Sinkzone during chess p
 
 ## Key Features
 
-- **DNS-level blocking** – Stops distractions before they reach your apps
-- **Focus Mode** – Block all but allowlisted domains for a set duration
-- **Terminal UI** – Real-time DNS traffic viewer with tabbed interface
-- **Memory-backed rules** – Focus mode expires automatically
-- **Cross-platform** – Works on macOS, Linux, and Windows
+- **DNS-level blocking**: Stops distractions before they reach your apps
+- **Focus Mode**: Block all but allowlisted domains for a set duration
+- **Terminal UI**: Real-time DNS traffic viewer with tabbed interface
+- **Memory-backed rules**: Focus mode expires automatically
+- **Cross-platform**: Works on macOS, Linux, and Windows
 
 ---
 
@@ -93,7 +94,7 @@ Now I can code for hours uninterrupted. Even my son uses Sinkzone during chess p
 
 **Homebrew (macOS):**
 ```bash
-brew tap berbyte/sinkzone
+brew tap berbyte/ber
 brew install sinkzone
 ````
 

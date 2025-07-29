@@ -46,6 +46,8 @@ nfpms:
     formats:
       - deb
       - rpm
+      - apk
+      - archlinux
     contents:
       - src: dist/{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}*/{{ .Binary }}
         dst: /usr/local/bin/{{ .Binary }}
@@ -69,13 +71,15 @@ brews:
     description: "A strict DNS filter to help you stay focused — or keep your kids safe"
     repository:
       owner: berbyte
-      name: sinkzone
+      name: homebrew-ber
       branch: main
+      token: "{{ .Env.PAT_GITHUB_TOKEN }}"
     commit_author:
       name: GitHub Actions
       email: actions@github.com
     url_template: "https://github.com/berbyte/sinkzone/releases/download/v{{ .Version }}/{{ .ArtifactName }}"
     commit_msg_template: "Update {{ .ProjectName }} to v{{ .Version }}"
+
 
 release:
   name_template: 'v{{ .Version }}'
