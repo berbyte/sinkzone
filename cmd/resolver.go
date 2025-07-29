@@ -25,7 +25,7 @@ func isAdmin() bool {
 
 var resolverCmd = &cobra.Command{
 	Use:   "resolver",
-	Short: "Start the DNS resolver service",
+	Short: "Start the DNS resolve	r service",
 	Long:  `Start the DNS resolver service that handles DNS requests and applies focus mode rules.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check if running with administrator/root privileges (required for port 53)

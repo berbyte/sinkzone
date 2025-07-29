@@ -95,7 +95,8 @@ Now I can code for hours uninterrupted. Even my son uses Sinkzone during chess p
 **Homebrew (macOS):**
 ```bash
 brew tap berbyte/ber
-brew install sinkzone
+brew install berbyte/ber/sinkzone
+xattr -d com.apple.quarantine $(which sinkzone)
 ````
 
 **Manual (all platforms):**
