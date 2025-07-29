@@ -67,7 +67,7 @@ homebrew_casks:
       owner: berbyte
       name: homebrew-ber
       branch: main
-      token: "{{ .Env.GITHUB_PERSONAL_AUTH_TOKEN }}"
+      token: "{{ .Env.GH_PAT }}"
     commit_author:
       name: goreleaserbot
       email: bot@goreleaser.com

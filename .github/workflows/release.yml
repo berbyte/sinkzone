@@ -28,6 +28,6 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_PERSONAL_AUTH_TOKEN: ${{ secrets.GITHUB_PERSONAL_AUTH_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
 
   # Homebrew updates are now handled by GoReleaser directly
