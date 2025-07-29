@@ -27,9 +27,6 @@ archives:
       {{- title .Os }}_
       {{- if eq .Arch "amd64" }}x86_64
       {{- else }}{{ .Arch }}{{ end }}
-    format_overrides:
-      - goos: windows
-        format: "zip"
     files:
       - README.md
       - LICENSE
@@ -52,9 +49,6 @@ nfpms:
       - src: dist/{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}*/{{ .Binary }}
         dst: /usr/local/bin/{{ .Binary }}
 
-snapshot:
-  name_template: "{{ .Version }}"
-
 changelog:
   sort: asc
   filters:
@@ -65,7 +59,7 @@ changelog:
       - Merge pull request
       - Merge branch
 
-brews:
+homebrew_casks:
   - name: sinkzone
     homepage: "https://github.com/berbyte/sinkzone"
     description: "A strict DNS filter to help you stay focused — or keep your kids safe"
@@ -73,10 +67,11 @@ brews:
       owner: berbyte
       name: homebrew-ber
       branch: main
-      token: "{{ .Env.PAT_GITHUB_TOKEN }}"
+      token: "{{ .Env.GITHUB_PERSONAL_AUTH_TOKEN }}"
     commit_author:
-      name: GitHub Actions
-      email: actions@github.com
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    directory: "Formula"
     url_template: "https://github.com/berbyte/sinkzone/releases/download/v{{ .Version }}/{{ .ArtifactName }}"
     commit_msg_template: "Update {{ .ProjectName }} to v{{ .Version }}"
 
