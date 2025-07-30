@@ -4,35 +4,98 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/berbyte/sinkzone/internal/config"
+	"github.com/berbyte/sinkzone/internal/socket"
 	"github.com/spf13/cobra"
 )
 
+var (
+	focusEnable   bool
+	focusDisable  bool
+	focusDuration string
+)
+
 var focusCmd = &cobra.Command{
-	Use:   "focus [duration]",
-	Short: "Switch to focus mode",
-	Long:  `Switch to focus mode for the specified duration. Duration can be specified as "1h", "30m", etc.`,
-	Args:  cobra.ExactArgs(1),
+	Use:   "focus [command]",
+	Short: "Manage focus mode",
+	Long: `Enables or disables focus mode, which blocks all non-allowlisted domains.
+
+Focus mode is the core productivity feature in Sinkzone. When enabled, only DNS requests to domains on your allowlist will be resolved — everything else is silently blocked.`,
+	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		duration, err := time.ParseDuration(args[0])
-		if err != nil {
-			return fmt.Errorf("invalid duration format: %w", err)
+		// Handle subcommands
+		if len(args) > 0 {
+			switch args[0] {
+			case "start":
+				return enableFocusMode(1 * time.Hour)
+			default:
+				return fmt.Errorf("unknown command: %s", args[0])
+			}
 		}
 
-		// Initialize state manager
-		stateMgr, err := config.NewStateManager()
-		if err != nil {
-			return fmt.Errorf("failed to initialize state manager: %w", err)
+		// Handle flags
+		if focusDisable {
+			return disableFocusMode()
 		}
 
-		// Enable focus mode with duration
-		if err := stateMgr.SetFocusMode(true, duration); err != nil {
-			return fmt.Errorf("failed to enable focus mode: %w", err)
+		if focusEnable {
+			duration := 1 * time.Hour // Default 1 hour
+			if focusDuration != "" {
+				var err error
+				duration, err = time.ParseDuration(focusDuration)
+				if err != nil {
+					return fmt.Errorf("invalid duration format: %w", err)
+				}
+			}
+			return enableFocusMode(duration)
 		}
 
-		endTime := time.Now().Add(duration)
-		fmt.Printf("Focus mode activated for %s (until %s)\n", duration, endTime.Format("15:04:05"))
-		fmt.Printf("DNS resolver will block non-allowlisted domains immediately.\n")
-		return nil
+		// If no args or flags, show help
+		return cmd.Help()
 	},
+}
+
+func init() {
+	focusCmd.Flags().BoolVar(&focusEnable, "enable", false, "Enable focus mode")
+	focusCmd.Flags().BoolVar(&focusDisable, "disable", false, "Disable focus mode")
+	focusCmd.Flags().StringVar(&focusDuration, "duration", "", "Duration for focus mode (e.g., '1h', '30m')")
+}
+
+func enableFocusMode(duration time.Duration) error {
+	// Create socket client
+	client := socket.NewClient()
+
+	// Try to connect to socket
+	if err := client.Connect(); err != nil {
+		return fmt.Errorf("failed to connect to resolver socket: %w\nMake sure the resolver is running with 'sudo sinkzone resolver'", err)
+	}
+	defer client.Disconnect()
+
+	// Set focus mode via socket
+	if err := client.SetFocusMode(true, duration); err != nil {
+		return fmt.Errorf("failed to enable focus mode: %w", err)
+	}
+
+	endTime := time.Now().Add(duration)
+	fmt.Printf("Focus mode activated for %s (until %s)\n", duration, endTime.Format("15:04:05"))
+	fmt.Printf("DNS resolver will block non-allowlisted domains immediately.\n")
+	return nil
+}
+
+func disableFocusMode() error {
+	// Create socket client
+	client := socket.NewClient()
+
+	// Try to connect to socket
+	if err := client.Connect(); err != nil {
+		return fmt.Errorf("failed to connect to resolver socket: %w\nMake sure the resolver is running with 'sudo sinkzone resolver'", err)
+	}
+	defer client.Disconnect()
+
+	// Set focus mode via socket
+	if err := client.SetFocusMode(false, 0); err != nil {
+		return fmt.Errorf("failed to disable focus mode: %w", err)
+	}
+
+	fmt.Printf("Focus mode disabled. All domains will be allowed.\n")
+	return nil
 }

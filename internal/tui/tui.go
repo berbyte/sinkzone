@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,7 +9,7 @@ import (
 	"time"
 
 	"github.com/berbyte/sinkzone/internal/config"
-	"github.com/berbyte/sinkzone/internal/database"
+	"github.com/berbyte/sinkzone/internal/socket"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -17,7 +18,7 @@ import (
 const sinkzoneBanner = `
   ██████  ██▓ ███▄    █  ██ ▄█▀▒███████▒ ▒█████   ███▄    █ ▓█████ 
 ▒██    ▒ ▓██▒ ██ ▀█   █  ██▄█▒ ▒ ▒ ▒ ▒ ▄▀░▒██▒  ██▒ ██ ▀█   █ ▓█   ▀ 
-░ ▓██▄   ▒██▒▓██  ▀█ ██▒▓███▄░ ░ ▒ ▄▀▒░ ▒██░  ██▒▓██  ▀█ ██▒▒███   
+░ ▓██▄   ▒██▒▓██  ▀█ ██▒▓███▄░ ░ ▒ ▄▀▒░ ▒██░  ██▒▓██▒  ▐▌██▒▒███   
   ▒   ██▒░██░▓██▒  ▐▌██▒▓██ █▄   ▄▀▒   ░▒██   ██░▓██▒  ▐▌██▒▒▓█  ▄ 
 ▒██████▒▒░██░▒██░   ▓██░▒██▒ █▄▒███████▒░ ████▓▒░▒██░   ▓██░░▒████▒
 ▒ ▒▓▒ ▒ ░░▓  ░ ▒░   ▒ ▒ ▒ ▒▒ ▓▒░▒▒ ▓░▒░▒░ ▒░▒░▒░ ░ ▒░   ▒ ▒ ░░ ▒░ ░
@@ -29,26 +30,16 @@ const sinkzoneBanner = `
 
 // Tab-specific state structures
 type MonitoringState struct {
-	dnsQueries  []database.DNSQuery
+	dnsQueries  []socket.DNSQuery
 	lastUpdate  time.Time
 	lastRefresh time.Time
 	tableCursor int
 	allowlist   []string
 }
 
-type SettingsState struct {
-	cursor         int // Which field is selected (0 = resolver1, 1 = resolver2, 2 = save)
-	resolver1Input string
-	resolver2Input string
-	editingField   int // -1 = not editing, 0 = editing resolver1, 1 = editing resolver2
-}
-
-type AboutState struct {
-	// No specific state needed for now
-}
-
 type AllowedDomainsState struct {
-	cursor int // Which domain is currently selected
+	cursor  int // Which domain is currently selected
+	domains []string
 }
 
 type Model struct {
@@ -63,9 +54,9 @@ type Model struct {
 	currentLine   int
 	animationDone bool
 
-	// Database and config
-	db     *database.Database
-	config *config.Config
+	// Socket client and config
+	socketClient *socket.Client
+	config       *config.Config
 
 	// Focus mode state
 	focusModeActive  bool
@@ -75,9 +66,17 @@ type Model struct {
 
 	// Tab-specific states
 	monitoring     MonitoringState
-	settings       SettingsState
-	about          AboutState
 	allowedDomains AllowedDomainsState
+
+	// Update tracking
+	allowlistUpdated  bool      // Flag to track when allowlist was updated
+	lastChangedDomain string    // Track the last domain that was changed
+	lastChangeTime    time.Time // When the last change occurred
+
+	// Real-time update tracking
+	allowlistUpdatePending bool
+	queryUpdatePending     bool
+	focusModeUpdatePending bool
 }
 
 // Cleanup function to restore terminal
@@ -164,17 +163,11 @@ func Start() error {
 	// Split banner into lines for animation
 	bannerLines := strings.Split(strings.TrimSpace(sinkzoneBanner), "\n")
 
-	// Initialize database
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get home directory: %w", err)
-	}
-	dbPath := filepath.Join(homeDir, ".sinkzone", "sinkzone.db")
-	db, err := database.New(dbPath)
-	if err != nil {
-		// Continue without database if it fails to initialize
-		fmt.Printf("Warning: failed to initialize database: %v\n", err)
-		db = nil
+	// Initialize socket client
+	socketClient := socket.NewClient()
+	if err := socketClient.Connect(); err != nil {
+		fmt.Printf("Warning: failed to connect to socket: %v\n", err)
+		socketClient = nil
 	}
 
 	// Load config
@@ -182,44 +175,27 @@ func Start() error {
 	if err != nil {
 		fmt.Printf("Warning: failed to load config: %v\n", err)
 		cfg = &config.Config{
-			Mode:                "normal",
 			UpstreamNameservers: []string{"8.8.8.8", "1.1.1.1"},
 		}
 	}
 
-	// Initialize resolver inputs from config
-	resolver1Input := "8.8.8.8"
-	resolver2Input := "1.1.1.1"
-	if len(cfg.UpstreamNameservers) > 0 {
-		resolver1Input = cfg.UpstreamNameservers[0]
-	}
-	if len(cfg.UpstreamNameservers) > 1 {
-		resolver2Input = cfg.UpstreamNameservers[1]
-	}
-
 	m := Model{
-		tabs:          []string{"Monitoring", "Allowed Domains", "Settings", "About"},
+		tabs:          []string{"Monitoring", "Allowlist"},
 		bannerLines:   bannerLines,
 		currentLine:   0,
 		animationDone: false,
-		db:            db,
+		socketClient:  socketClient,
 		config:        cfg,
 		monitoring: MonitoringState{
-			dnsQueries:  []database.DNSQuery{},
+			dnsQueries:  []socket.DNSQuery{},
 			lastUpdate:  time.Now(),
 			lastRefresh: time.Now(),
 			tableCursor: 0,
 			allowlist:   []string{},
 		},
-		settings: SettingsState{
-			cursor:         0,
-			resolver1Input: resolver1Input,
-			resolver2Input: resolver2Input,
-			editingField:   -1,
-		},
-		about: AboutState{},
 		allowedDomains: AllowedDomainsState{
-			cursor: 0,
+			cursor:  0,
+			domains: []string{},
 		},
 	}
 
@@ -227,23 +203,37 @@ func Start() error {
 	m.updateFocusModeStatus()
 
 	// Load initial data for monitoring tab
-	if db != nil {
+	if socketClient != nil && socketClient.IsConnected() {
 		// Load initial DNS queries
-		initialQueries, err := db.GetDNSStats()
-		if err == nil {
-			m.monitoring.dnsQueries = initialQueries
-		}
+		m.monitoring.dnsQueries = socketClient.GetQueries()
 
 		// Load initial allowlist
-		allowlist, err := db.GetAllowlist()
-		if err == nil {
-			m.monitoring.allowlist = allowlist
-		}
+		m.monitoring.allowlist = socketClient.GetAllowlist()
+
+		// Set up socket callbacks for real-time updates
+		socketClient.SetAllowlistUpdateCallback(func(allowlist []string) {
+			// This will be called when allowlist is updated from the socket
+			// Set flag to update in the main loop
+			m.allowlistUpdatePending = true
+		})
+		socketClient.SetQueryUpdateCallback(func(queries []socket.DNSQuery) {
+			// This will be called when queries are updated from the socket
+			// Set flag to update in the main loop
+			m.queryUpdatePending = true
+		})
+		socketClient.SetFocusModeUpdateCallback(func(focusMode bool, endTime *time.Time) {
+			// This will be called when focus mode is updated from the socket
+			// Set flag to update in the main loop
+			m.focusModeUpdatePending = true
+		})
 	}
 
-	// If focus mode is active, start on allowed domains tab instead of monitoring
-	if m.focusModeActive {
-		m.activeTab = 1 // Start on Allowed Domains tab
+	// Load initial allowlist data
+	m.loadAllowlistData()
+
+	// Initialize cursor bounds
+	if len(m.monitoring.dnsQueries) > 0 {
+		m.monitoring.tableCursor = len(m.monitoring.dnsQueries) - 1 // Start at the bottom
 	}
 
 	// Create program with improved terminal handling
@@ -263,19 +253,60 @@ func Start() error {
 	return nil
 }
 
-func (m Model) saveSettings() {
-	// Update config with new resolver values
-	m.config.UpstreamNameservers = []string{m.settings.resolver1Input, m.settings.resolver2Input}
+func (m Model) loadAllowlistData() {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
 
-	// Save config to file
-	if err := config.Save(m.config); err != nil {
-		// Could add error handling here, but for now just continue
-		fmt.Printf("Warning: failed to save config: %v\n", err)
+	allowlistPath := filepath.Join(homeDir, ".sinkzone", "allowlist.txt")
+
+	// Check if allowlist file exists
+	if _, err := os.Stat(allowlistPath); os.IsNotExist(err) {
+		m.allowedDomains.domains = []string{}
+		return
+	}
+
+	// Read and display allowlist
+	file, err := os.Open(allowlistPath)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+
+	var domains []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		domain := strings.TrimSpace(scanner.Text())
+		if domain != "" && !strings.HasPrefix(domain, "#") {
+			domains = append(domains, domain)
+		}
+	}
+
+	m.allowedDomains.domains = domains
+
+	// Adjust cursor if needed
+	if len(domains) > 0 {
+		if m.allowedDomains.cursor >= len(domains) {
+			m.allowedDomains.cursor = len(domains) - 1
+		}
+	} else {
+		m.allowedDomains.cursor = 0
 	}
 }
 
 func (m Model) enableFocusMode() error {
-	// Initialize state manager
+	// Use socket client if available
+	if m.socketClient != nil && m.socketClient.IsConnected() {
+		if err := m.socketClient.SetFocusMode(true, time.Hour); err != nil {
+			return fmt.Errorf("failed to enable focus mode via socket: %w", err)
+		}
+		// Update focus mode status immediately
+		m.updateFocusModeStatus()
+		return nil
+	}
+
+	// Fallback to direct state management if socket is not available
 	stateMgr, err := config.NewStateManager()
 	if err != nil {
 		return fmt.Errorf("failed to initialize state manager: %w", err)
@@ -290,45 +321,35 @@ func (m Model) enableFocusMode() error {
 }
 
 func (m Model) updateFocusModeStatus() {
-	// Initialize state manager
+	// Try to get focus mode state from socket first
+	if m.socketClient != nil && m.socketClient.IsConnected() {
+		focusMode, endTime := m.socketClient.GetFocusModeState()
+		m.focusModeActive = focusMode
+		m.focusEndTime = endTime
+		return
+	}
+
+	// Fallback to state manager if socket is not available
 	stateMgr, err := config.NewStateManager()
 	if err != nil {
 		return
 	}
 
-	// Force reload state from file by calling CheckFocusMode
-	stateMgr.CheckFocusMode()
-
-	// Get current state
 	state := stateMgr.GetState()
-
-	// Update focus mode status
 	m.focusModeActive = state.FocusMode
 	m.focusEndTime = state.FocusEndTime
-
-	// Only switch tabs if focus mode just became active and we're on monitoring tab
-	// Don't switch tabs if focus mode is already active or if we're not on monitoring tab
-	if m.focusModeActive && m.activeTab == 0 {
-		// Check if this is a new focus mode activation (not just a status check)
-		// We'll handle this in the key handler instead of here
-	}
 }
 
-// checkAndRestoreTerminal ensures the terminal is in a proper state
 func checkAndRestoreTerminal() {
-	// Check if terminal is in a bad state and restore it
+	// Check if terminal is in raw mode and restore if needed
 	fmt.Print("\033[?25h") // Show cursor
-	fmt.Print("\033[2J")   // Clear screen
-	fmt.Print("\033[H")    // Move cursor to top
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(
-		tea.EnterAltScreen,
-		tea.Tick(time.Millisecond*100, func(t time.Time) tea.Msg {
-			return tickMsg(t)
-		}),
-	)
+	// Start animation tick
+	return tea.Tick(time.Millisecond*100, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -355,18 +376,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			})
 		} else {
 			// Update DNS data every second
-			if m.db != nil {
-				// Get new records since last refresh
-				newQueries, err := m.db.GetNewDNSRecords(m.monitoring.lastRefresh)
-				if err == nil && len(newQueries) > 0 {
-					// Append new queries to existing ones
-					m.monitoring.dnsQueries = append(newQueries, m.monitoring.dnsQueries...)
-
-					// Limit to last 100 records to prevent memory issues
-					if len(m.monitoring.dnsQueries) > 100 {
-						m.monitoring.dnsQueries = m.monitoring.dnsQueries[:100]
-					}
-
+			if m.socketClient != nil && m.socketClient.IsConnected() {
+				// Get new records from socket
+				newQueries := m.socketClient.GetQueries()
+				if len(newQueries) > 0 {
+					m.monitoring.dnsQueries = newQueries
 					m.monitoring.lastUpdate = time.Now()
 				}
 
@@ -374,12 +388,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.monitoring.lastRefresh = time.Now()
 
 				// Load allowlist
-				allowlist, err := m.db.GetAllowlist()
-				if err == nil {
-					m.monitoring.allowlist = allowlist
+				newAllowlist := m.socketClient.GetAllowlist()
+				if len(newAllowlist) != len(m.monitoring.allowlist) {
+					// Allowlist changed, adjust cursor if needed
+					if m.activeTab == 1 && m.allowedDomains.cursor >= len(newAllowlist) {
+						m.allowedDomains.cursor = max(len(newAllowlist)-1, 0)
+					}
+					m.allowlistUpdated = true
 				}
+				m.monitoring.allowlist = newAllowlist
 			} else {
-				// If no database, still update the refresh time to prevent errors
+				// If no socket connection, still update the refresh time to prevent errors
 				m.monitoring.lastRefresh = time.Now()
 			}
 
@@ -389,6 +408,47 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Clear focus message after 3 seconds
 			if m.focusMessage != "" && time.Since(m.focusMessageTime) > 3*time.Second {
 				m.focusMessage = ""
+			}
+
+			// Clear allowlist updated flag after handling
+			if m.allowlistUpdated {
+				m.allowlistUpdated = false
+			}
+
+			// Handle pending real-time updates from socket callbacks
+			if m.allowlistUpdatePending {
+				// Update allowlist immediately from socket
+				newAllowlist := m.socketClient.GetAllowlist()
+				if len(newAllowlist) != len(m.monitoring.allowlist) {
+					// Allowlist changed, adjust cursor if needed
+					if m.activeTab == 1 && m.allowedDomains.cursor >= len(newAllowlist) {
+						m.allowedDomains.cursor = max(len(newAllowlist)-1, 0)
+					}
+					m.allowlistUpdated = true
+				}
+				m.monitoring.allowlist = newAllowlist
+				m.allowlistUpdatePending = false
+			}
+
+			if m.queryUpdatePending {
+				// Update queries immediately from socket
+				newQueries := m.socketClient.GetQueries()
+				if len(newQueries) > 0 {
+					m.monitoring.dnsQueries = newQueries
+					m.monitoring.lastUpdate = time.Now()
+				}
+				m.queryUpdatePending = false
+			}
+
+			if m.focusModeUpdatePending {
+				// Update focus mode status immediately from socket
+				m.updateFocusModeStatus()
+				m.focusModeUpdatePending = false
+			}
+
+			// Clear last changed domain after 2 seconds
+			if m.lastChangedDomain != "" && time.Since(m.lastChangeTime) > 2*time.Second {
+				m.lastChangedDomain = ""
 			}
 
 			return m, tea.Tick(time.Second, func(t time.Time) tea.Msg {
@@ -410,7 +470,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				// Immediately update focus mode status in TUI
 				m.updateFocusModeStatus()
-				// If we're on monitoring tab, switch to allowed domains tab
+				// If we're on monitoring tab, switch to allowlist tab
 				if m.activeTab == 0 {
 					m.activeTab = 1
 				}
@@ -423,208 +483,121 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.activeTab > 0 {
 				m.activeTab--
 			} else {
-				m.activeTab = len(m.tabs) - 1 // Wrap to last tab
+				m.activeTab = len(m.tabs) - 1
 			}
-			// If focus mode is active, skip monitoring tab
-			if m.focusModeActive && m.activeTab == 0 {
-				m.activeTab = len(m.tabs) - 1 // Go to last tab instead
+			// Reload allowlist data when switching to allowlist tab
+			if m.activeTab == 1 {
+				m.loadAllowlistData()
 			}
 		case "right", "l":
 			// Navigate to next tab
 			if m.activeTab < len(m.tabs)-1 {
 				m.activeTab++
 			} else {
-				m.activeTab = 0 // Wrap to first tab
+				m.activeTab = 0
 			}
-			// If focus mode is active, skip monitoring tab
-			if m.focusModeActive && m.activeTab == 0 {
-				m.activeTab = 1 // Go to next tab instead
+			// Reload allowlist data when switching to allowlist tab
+			if m.activeTab == 1 {
+				m.loadAllowlistData()
 			}
-		case "1", "2", "3", "4":
-			// Direct tab navigation (1-4 keys)
-			tabIndex := int(msg.String()[0] - '1') // Convert "1" to 0, "2" to 1, etc.
-			if tabIndex >= 0 && tabIndex < len(m.tabs) {
-				// If focus mode is active, prevent going to monitoring tab (index 0)
-				if m.focusModeActive && tabIndex == 0 {
-					// Do nothing - stay on current tab
-					return m, nil
-				}
-				m.activeTab = tabIndex
+		case "1":
+			m.activeTab = 0
+			// Reload allowlist data when switching to allowlist tab
+			if m.activeTab == 1 {
+				m.loadAllowlistData()
 			}
+		case "2":
+			m.activeTab = 1
+			// Reload allowlist data when switching to allowlist tab
+			m.loadAllowlistData()
 		default:
-			// Delegate tab-specific updates to their respective functions
-			switch m.activeTab {
-			case 0: // Monitoring tab
-				if m.focusModeActive {
-					// Do nothing - monitoring tab is disabled during focus mode
-					return m, nil
-				} else {
-					m, _ = m.updateMonitoring(msg)
-				}
-			case 1: // Allowed Domains tab
-				m, _ = m.updateAllowedDomains(msg)
-			case 2: // Settings tab
-				m, _ = m.updateSettings(msg)
-			case 3: // About tab
-				m, _ = m.updateAbout(msg)
+			// Handle tab-specific key events
+			if m.activeTab == 0 {
+				return m.updateMonitoring(msg)
+			} else if m.activeTab == 1 {
+				return m.updateAllowedDomains(msg)
 			}
 		}
 	}
 	return m, nil
 }
 
-// Tab-specific update functions
 func (m Model) updateMonitoring(msg tea.KeyMsg) (Model, tea.Cmd) {
+	// Calculate visible entries
+	maxEntries := 15
+	startIndex := 0
+	if len(m.monitoring.dnsQueries) > maxEntries {
+		startIndex = len(m.monitoring.dnsQueries) - maxEntries
+	}
+	visibleCount := min(maxEntries, len(m.monitoring.dnsQueries))
+
 	switch msg.String() {
 	case "up", "k":
-		if len(m.monitoring.dnsQueries) > 0 {
-			// Simple up navigation with wrapping
-			if m.monitoring.tableCursor > 0 {
-				m.monitoring.tableCursor--
-			} else {
-				m.monitoring.tableCursor = len(m.monitoring.dnsQueries) - 1
-			}
+		if m.monitoring.tableCursor > startIndex {
+			m.monitoring.tableCursor--
 		}
 	case "down", "j":
-		if len(m.monitoring.dnsQueries) > 0 {
-			// Simple down navigation with wrapping
-			if m.monitoring.tableCursor < len(m.monitoring.dnsQueries)-1 {
-				m.monitoring.tableCursor++
-			} else {
-				m.monitoring.tableCursor = 0
-			}
+		if m.monitoring.tableCursor < startIndex+visibleCount-1 {
+			m.monitoring.tableCursor++
 		}
-	case "enter", " ":
+	case "space", "enter":
 		if len(m.monitoring.dnsQueries) > 0 && m.monitoring.tableCursor < len(m.monitoring.dnsQueries) {
-			// Toggle allow/block status for selected domain
-			selectedDomain := m.monitoring.dnsQueries[m.monitoring.tableCursor].Domain
-			if m.isInAllowlist(selectedDomain) {
+			selectedQuery := m.monitoring.dnsQueries[m.monitoring.tableCursor]
+			selectedDomain := selectedQuery.Domain
+
+			// Check if domain is in allowlist
+			isInAllowlist := m.isInAllowlist(selectedDomain)
+
+			if isInAllowlist {
 				// Remove from allowlist
-				m.removeFromAllowlist(selectedDomain)
-				// Remove from database
-				if m.db != nil {
-					m.db.RemoveFromAllowlist(selectedDomain)
+				if m.socketClient != nil && m.socketClient.IsConnected() {
+					if err := m.socketClient.RemoveFromAllowlist(selectedDomain); err == nil {
+						// Update local state immediately
+						m.monitoring.allowlist = m.socketClient.GetAllowlist()
+						m.lastChangedDomain = selectedDomain
+						m.lastChangeTime = time.Now()
+					}
 				}
 			} else {
 				// Add to allowlist
-				if !m.isInAllowlist(selectedDomain) {
-					m.monitoring.allowlist = append(m.monitoring.allowlist, selectedDomain)
-					// Save to database
-					if m.db != nil {
-						m.db.AddToAllowlist(selectedDomain)
+				if m.socketClient != nil && m.socketClient.IsConnected() {
+					if err := m.socketClient.AddToAllowlist(selectedDomain); err == nil {
+						// Update local state immediately
+						m.monitoring.allowlist = m.socketClient.GetAllowlist()
+						m.lastChangedDomain = selectedDomain
+						m.lastChangeTime = time.Now()
 					}
 				}
 			}
 		}
 	}
-	return m, nil
-}
-
-func (m Model) updateSettings(msg tea.KeyMsg) (Model, tea.Cmd) {
-	switch msg.String() {
-	case "up", "k":
-		if m.settings.editingField == -1 {
-			// Not editing, navigate between fields
-			if m.settings.cursor > 0 {
-				m.settings.cursor--
-			} else {
-				m.settings.cursor = 2 // Wrap to last option
-			}
-		}
-	case "down", "j":
-		if m.settings.editingField == -1 {
-			// Not editing, navigate between fields
-			if m.settings.cursor < 2 {
-				m.settings.cursor++
-			} else {
-				m.settings.cursor = 0 // Wrap to first option
-			}
-		}
-	case "enter":
-		if m.settings.editingField == -1 {
-			// Start editing the selected field
-			if m.settings.cursor == 0 {
-				m.settings.editingField = 0
-			} else if m.settings.cursor == 1 {
-				m.settings.editingField = 1
-			} else if m.settings.cursor == 2 {
-				// Save button pressed
-				m.saveSettings()
-			}
-		} else {
-			// Finish editing
-			m.settings.editingField = -1
-		}
-	case "escape":
-		if m.settings.editingField != -1 {
-			// Cancel editing
-			m.settings.editingField = -1
-		}
-	case "backspace":
-		if m.settings.editingField != -1 {
-			if m.settings.editingField == 0 && len(m.settings.resolver1Input) > 0 {
-				m.settings.resolver1Input = m.settings.resolver1Input[:len(m.settings.resolver1Input)-1]
-			} else if m.settings.editingField == 1 && len(m.settings.resolver2Input) > 0 {
-				m.settings.resolver2Input = m.settings.resolver2Input[:len(m.settings.resolver2Input)-1]
-			}
-		}
-	default:
-		// Handle text input for settings form
-		if m.settings.editingField != -1 {
-			if len(msg.Runes) > 0 {
-				r := msg.Runes[0]
-				if r >= 32 && r <= 126 { // Printable ASCII characters
-					if m.settings.editingField == 0 {
-						m.settings.resolver1Input += string(r)
-					} else if m.settings.editingField == 1 {
-						m.settings.resolver2Input += string(r)
-					}
-				}
-			}
-		}
-	}
-	return m, nil
-}
-
-func (m Model) updateAbout(msg tea.KeyMsg) (Model, tea.Cmd) {
-	// About tab has no interactive elements
 	return m, nil
 }
 
 func (m Model) updateAllowedDomains(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case "up", "k":
-		if len(m.monitoring.allowlist) > 0 {
-			// Simple up navigation with wrapping
-			if m.allowedDomains.cursor > 0 {
-				m.allowedDomains.cursor--
-			} else {
-				m.allowedDomains.cursor = len(m.monitoring.allowlist) - 1
-			}
+		if m.allowedDomains.cursor > 0 {
+			m.allowedDomains.cursor--
 		}
 	case "down", "j":
-		if len(m.monitoring.allowlist) > 0 {
-			// Simple down navigation with wrapping
-			if m.allowedDomains.cursor < len(m.monitoring.allowlist)-1 {
-				m.allowedDomains.cursor++
-			} else {
-				m.allowedDomains.cursor = 0
-			}
+		if m.allowedDomains.cursor < len(m.allowedDomains.domains)-1 {
+			m.allowedDomains.cursor++
 		}
-	case "enter", " ":
-		if len(m.monitoring.allowlist) > 0 && m.allowedDomains.cursor < len(m.monitoring.allowlist) {
-			// Remove selected domain from allowlist
-			selectedDomain := m.monitoring.allowlist[m.allowedDomains.cursor]
-			m.removeFromAllowlist(selectedDomain)
+	case "space", "enter":
+		if len(m.allowedDomains.domains) > 0 && m.allowedDomains.cursor < len(m.allowedDomains.domains) {
+			selectedDomain := m.allowedDomains.domains[m.allowedDomains.cursor]
 
-			// Remove from database
-			if m.db != nil {
-				m.db.RemoveFromAllowlist(selectedDomain)
-			}
-
-			// Adjust cursor if we removed the last item
-			if m.allowedDomains.cursor >= len(m.monitoring.allowlist) {
-				m.allowedDomains.cursor = max(len(m.monitoring.allowlist)-1, 0)
+			// Remove from allowlist
+			if m.socketClient != nil && m.socketClient.IsConnected() {
+				if err := m.socketClient.RemoveFromAllowlist(selectedDomain); err == nil {
+					// Update local state immediately
+					m.monitoring.allowlist = m.socketClient.GetAllowlist()
+					m.lastChangedDomain = selectedDomain
+					m.lastChangeTime = time.Now()
+					// Reload allowlist data
+					m.loadAllowlistData()
+				}
 			}
 		}
 	}
@@ -632,28 +605,15 @@ func (m Model) updateAllowedDomains(msg tea.KeyMsg) (Model, tea.Cmd) {
 }
 
 func (m Model) renderTabs() string {
-	// Safety check to ensure activeTab is within bounds
-	if m.activeTab >= len(m.tabs) {
-		m.activeTab = 0
-	}
-
 	var renderedTabs []string
-
-	for i, t := range m.tabs {
-		// Disable monitoring tab when focus mode is active
-		if m.focusModeActive && i == 0 { // Monitoring tab
-			disabledStyle := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#666666")). // Grayed out
-				Strikethrough(true)
-			renderedTabs = append(renderedTabs, disabledStyle.Render(t))
-		} else if i == m.activeTab {
-			renderedTabs = append(renderedTabs, activeTabStyle.Render(t))
+	for i, tab := range m.tabs {
+		if i == m.activeTab {
+			renderedTabs = append(renderedTabs, activeTabStyle.Render(tab))
 		} else {
-			renderedTabs = append(renderedTabs, tabStyle.Render(t))
+			renderedTabs = append(renderedTabs, tabStyle.Render(tab))
 		}
 	}
-
-	return lipgloss.JoinHorizontal(lipgloss.Top, renderedTabs...)
+	return lipgloss.JoinHorizontal(lipgloss.Left, renderedTabs...)
 }
 
 func (m Model) View() string {
@@ -686,8 +646,8 @@ func (m Model) View() string {
 	tabHeight := 1
 	footerHeight := 1
 
-	// Calculate content height with consistent padding
-	contentHeight := m.height - headerHeight - tabHeight - footerHeight - 6 // Extra padding for stability
+	// Calculate content height to fill remaining space
+	contentHeight := m.height - headerHeight - tabHeight - footerHeight - 2 // Minimal padding
 
 	// Ensure minimum content height
 	if contentHeight < 5 {
@@ -732,18 +692,14 @@ Monitoring is disabled during focus mode.
 
 DNS monitoring is temporarily disabled to help you stay focused.
 
-You can still manage your allowlist and configure settings.
+You can still manage your allowlist.
 
 Press ←/→ to switch to other tabs.`
 			} else {
 				contentText = m.renderDNSMonitoring()
 			}
-		} else if m.activeTab == 1 { // Allowed Domains tab
+		} else if m.activeTab == 1 { // Allowlist tab
 			contentText = m.renderAllowedDomains()
-		} else if m.activeTab == 2 { // Settings tab
-			contentText = m.renderSettings()
-		} else if m.activeTab == 3 { // About tab
-			contentText = m.renderHelp()
 		}
 	}
 
@@ -759,333 +715,155 @@ Press ←/→ to switch to other tabs.`
 		contentText = messageStyle.Render(m.focusMessage) + "\n\n" + contentText
 	}
 
-	// Truncate content if it's too long to prevent layout shifts
-	contentLines := strings.Split(contentText, "\n")
-	if len(contentLines) > contentHeight {
-		contentLines = contentLines[:contentHeight]
-		contentText = strings.Join(contentLines, "\n")
+	// Apply content style with conditional height
+	var content string
+	if m.activeTab == 0 { // Monitoring tab - use fixed height
+		content = contentStyle.Width(m.width - 4).Height(contentHeight).Render(contentText)
+	} else { // Allowlist tab - use flexible height
+		content = contentStyle.Width(m.width - 4).Render(contentText)
 	}
 
-	content := contentStyle.Width(m.width - 2).Height(contentHeight).Render(contentText)
+	// Footer with full width
+	footer := footerStyle.Width(m.width).Render("Navigation: ←/→ Switch tabs | ↑/↓ Navigate | Space/Enter Toggle | F Focus mode | Q Quit")
 
-	// Footer - pink bar like in screenshot
-	footerText := "q: Quit • f: Focus Mode (1h) • ←/→: Switch Tabs"
-	if m.activeTab == 0 {
-		if m.focusModeActive {
-			footerText = "🔒 Monitoring disabled in focus mode • f: Focus Mode (1h) • q: Quit • ←/→: Switch Tabs"
-		} else {
-			footerText = "↑/↓: Navigate • Space/Enter: Toggle Allow/Block • f: Focus Mode (1h) • q: Quit • ←/→: Switch Tabs"
-		}
-	} else if m.activeTab == 1 {
-		footerText = "↑/↓: Navigate • Space/Enter: Remove Domain • f: Focus Mode (1h) • q: Quit • ←/→: Switch Tabs"
-	} else if m.activeTab == 2 {
-		footerText = "↑/↓: Navigate • Enter: Edit/Save • Escape: Cancel • f: Focus Mode (1h) • q: Quit • ←/→: Switch Tabs"
-	}
-	footer := footerStyle.Width(m.width).Render(footerText)
-
-	// Build the layout vertically with consistent spacing
-	doc := strings.Builder{}
-	doc.WriteString(header)
-	doc.WriteString("\n")
-	doc.WriteString(tabs)
-	doc.WriteString("\n")
-	doc.WriteString(content)
-	doc.WriteString("\n")
-	doc.WriteString(footer)
-
-	return docStyle.Width(0).Height(0).Render(doc.String())
+	// Combine all elements
+	return docStyle.Render(
+		lipgloss.JoinVertical(
+			lipgloss.Left,
+			header,
+			tabs,
+			content,
+			footer,
+		),
+	)
 }
 
 func (m Model) renderDNSMonitoring() string {
 	if len(m.monitoring.dnsQueries) == 0 {
-		return "No DNS queries recorded yet.\n\nStart the DNS resolver to see real-time data."
+		return `
+No DNS queries recorded yet.
+
+Try making some web requests to see DNS activity.
+
+Make sure the resolver is running with 'sudo sinkzone resolver'`
 	}
 
-	// Ensure cursor is within bounds
-	if len(m.monitoring.dnsQueries) > 0 {
-		if m.monitoring.tableCursor >= len(m.monitoring.dnsQueries) {
-			m.monitoring.tableCursor = len(m.monitoring.dnsQueries) - 1
-		}
-		if m.monitoring.tableCursor < 0 {
-			m.monitoring.tableCursor = 0
-		}
-	}
-
-	// Calculate available space for table
-	availableHeight := m.height - 12
-	maxRows := availableHeight
-	if maxRows < 1 {
-		maxRows = 1
-	}
-
-	// Show all items, but limit display height
+	// Limit the number of entries to display to maintain fixed layout
+	maxEntries := 15 // Adjust based on available space
 	startIndex := 0
-	endIndex := len(m.monitoring.dnsQueries)
+	if len(m.monitoring.dnsQueries) > maxEntries {
+		startIndex = len(m.monitoring.dnsQueries) - maxEntries
+	}
 
-	// Create table header with proper alignment
-	header := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(accent4).
-		Render("Domain                         │  Count │ Last Seen  │ Action")
+	queries := m.monitoring.dnsQueries[startIndex:]
 
-	separator := lipgloss.NewStyle().
-		Foreground(muted).
-		Render("──────────────────────────────────────────────────────────────")
+	// Header
+	header := fmt.Sprintf("DNS Monitoring (%d queries)\n", len(m.monitoring.dnsQueries))
+	header += fmt.Sprintf("%-40s %-10s %-20s %s\n", "Domain", "Status", "Time", "Blocked")
+	header += strings.Repeat("-", 80) + "\n"
 
+	// Table rows
 	var rows []string
-	for i := startIndex; i < endIndex; i++ {
-		query := m.monitoring.dnsQueries[i]
-		status := "Block"                        // Default to blocked
-		statusColor := lipgloss.Color("#FF6B6B") // Red
-		if m.isInAllowlist(query.Domain) {
-			status = "Allow"
-			statusColor = accent3 // Green
+	for i, query := range queries {
+		status := "ALLOWED"
+		if query.Blocked {
+			status = "BLOCKED"
 		}
 
-		// Add indicator for new records
-		domainText := query.Domain
+		// Truncate domain if too long
+		domain := query.Domain
+		if len(domain) > 38 {
+			domain = domain[:35] + "..."
+		}
 
-		// Format status with color
-		statusText := lipgloss.NewStyle().Foreground(statusColor).Render(status)
+		// Check if this row is selected
+		isSelected := (i + startIndex) == m.monitoring.tableCursor
+		recentlyChanged := query.Domain == m.lastChangedDomain && time.Since(m.lastChangeTime) < 2*time.Second
 
-		// Use helper function for consistent formatting
-		// The cursor should be highlighted if it matches the current row in the dataset
-		isSelected := (i == m.monitoring.tableCursor)
-		rowText := formatTableRow(domainText, query.Count, query.Timestamp, statusText, isSelected)
-		rows = append(rows, rowText)
+		row := formatTableRow(domain, 1, query.Timestamp, status, isSelected, recentlyChanged)
+		rows = append(rows, row)
 	}
 
-	// Ensure we always have the same number of lines to prevent layout shifts
-	for len(rows) < maxRows {
-		rows = append(rows, strings.Repeat(" ", 60)) // Empty line with consistent width
-	}
+	// Footer
+	footer := fmt.Sprintf("\nLast updated: %s", m.monitoring.lastUpdate.Format("15:04:05"))
 
-	// Join all rows
-	table := header + "\n" + separator + "\n" + strings.Join(rows, "\n")
-
-	// Add summary
-	summary := lipgloss.NewStyle().
-		Foreground(muted).
-		Render(fmt.Sprintf("\nTotal queries: %d | Last update: %s",
-			len(m.monitoring.dnsQueries),
-			m.monitoring.lastUpdate.Format("15:04:05")))
-
-	return table + summary
-}
-
-func (m Model) renderHelp() string {
-	helpText := `
-Sinkzone - DNS-based Productivity Tool
-
-This tool helps you stay focused by blocking distracting websites during focus sessions.
-
-Features:
-• Real-time DNS monitoring
-• Configurable upstream resolvers
-• Allowlist management
-• Focus mode with automatic expiration
-
-Usage:
-• Press ←/→ to switch between tabs
-• Use ↑/↓ to navigate the monitoring table
-• Press Space/Enter to toggle allow/block status
-• Press f to enable focus mode for 1 hour
-• Press q to quit
-
-For more information, visit: https://github.com/berbyte/sinkzone
-`
-	return helpText
-}
-
-func (m Model) renderSettings() string {
-	// Form styles
-	formStyle := lipgloss.NewStyle().
-		Padding(1, 2).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#7C3AED"))
-
-	labelStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#E5E7EB")).
-		Bold(true)
-
-	inputStyle := lipgloss.NewStyle().
-		Padding(0, 1).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#6B7280"))
-
-	selectedInputStyle := lipgloss.NewStyle().
-		Padding(0, 1).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#7C3AED")).
-		Background(lipgloss.Color("#1F2937"))
-
-	buttonStyle := lipgloss.NewStyle().
-		Padding(0, 2).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#6B7280")).
-		Foreground(lipgloss.Color("#E5E7EB"))
-
-	selectedButtonStyle := lipgloss.NewStyle().
-		Padding(0, 2).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#7C3AED")).
-		Background(lipgloss.Color("#1F2937")).
-		Foreground(lipgloss.Color("#FFFFFF"))
-
-	// Render form
-	var form strings.Builder
-	form.WriteString("Upstream DNS Resolvers (IP addresses)\n\n")
-
-	// Resolver 1
-	form.WriteString(labelStyle.Render("Primary Resolver IP:"))
-	form.WriteString("\n")
-	if m.settings.cursor == 0 {
-		form.WriteString(selectedInputStyle.Render(m.settings.resolver1Input))
-	} else {
-		form.WriteString(inputStyle.Render(m.settings.resolver1Input))
-	}
-	form.WriteString("\n\n")
-
-	// Resolver 2
-	form.WriteString(labelStyle.Render("Secondary Resolver IP:"))
-	form.WriteString("\n")
-	if m.settings.cursor == 1 {
-		form.WriteString(selectedInputStyle.Render(m.settings.resolver2Input))
-	} else {
-		form.WriteString(inputStyle.Render(m.settings.resolver2Input))
-	}
-	form.WriteString("\n\n")
-
-	// Save button
-	if m.settings.cursor == 2 {
-		form.WriteString(selectedButtonStyle.Render("Save"))
-	} else {
-		form.WriteString(buttonStyle.Render("Save"))
-	}
-
-	return formStyle.Render(form.String())
+	return header + strings.Join(rows, "\n") + footer
 }
 
 func (m Model) renderAllowedDomains() string {
-	if len(m.monitoring.allowlist) == 0 {
-		return "No domains in allowlist.\n\nAdd domains from the Monitoring tab by pressing Space/Enter on blocked domains."
+	if len(m.allowedDomains.domains) == 0 {
+		return `
+Allowlist is empty.
+
+Add domains to your allowlist to permit them during focus mode.
+
+Use the Monitoring tab to see which domains are being accessed.`
 	}
 
-	// Ensure cursor is within bounds
-	if m.allowedDomains.cursor >= len(m.monitoring.allowlist) {
-		m.allowedDomains.cursor = len(m.monitoring.allowlist) - 1
-	}
-	if m.allowedDomains.cursor < 0 {
-		m.allowedDomains.cursor = 0
-	}
+	// Header
+	header := fmt.Sprintf("Allowlist (%d domains)\n", len(m.allowedDomains.domains))
+	header += strings.Repeat("-", 50) + "\n"
 
-	// Use the same styles as monitoring tab
-	headerStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(accent4).
-		Padding(0, 1)
-
-	// Create table header
-	header := headerStyle.Render("Domain                          │ Status")
-	separator := lipgloss.NewStyle().
-		Foreground(muted).
-		Render("──────────────────────────────────────────────────────────────")
-
-	// Render domain list with consistent table format
+	// Domain rows
 	var rows []string
-	for i, domain := range m.monitoring.allowlist {
-		isSelected := (i == m.allowedDomains.cursor)
+	for i, domain := range m.allowedDomains.domains {
+		isSelected := i == m.allowedDomains.cursor
+		recentlyChanged := domain == m.lastChangedDomain && time.Since(m.lastChangeTime) < 2*time.Second
 
-		// Use the same row formatting as monitoring tab
-		rowText := formatAllowedDomainRow(domain, isSelected)
-		rows = append(rows, rowText)
+		row := formatAllowedDomainRow(domain, isSelected)
+		if recentlyChanged {
+			// Add visual indicator for recently changed items
+			row = lipgloss.NewStyle().
+				Background(lipgloss.Color("#8B5CF6")). // Purple background
+				Render(row)
+		}
+		rows = append(rows, row)
 	}
 
-	// Join all rows
-	table := "\n" + header + "\n" + separator + "\n" + strings.Join(rows, "\n")
+	// Footer
+	footer := "\nPress Space/Enter to remove domains from allowlist."
 
-	// Add summary with consistent styling
-	summary := lipgloss.NewStyle().
-		Foreground(muted).
-		Render(fmt.Sprintf("\nTotal allowed domains: %d", len(m.monitoring.allowlist)))
-
-	return table + summary
+	return header + strings.Join(rows, "\n") + footer
 }
 
 func formatAllowedDomainRow(domain string, isSelected bool) string {
-	// Use the same styling as the monitoring tab
-	statusText := "Allowed"
-	statusColor := lipgloss.Color("#4ADE80") // Green for allowed
-
-	// Format the row with consistent column widths
-	domainText := truncateString(domain, 30)
-	statusTextFormatted := lipgloss.NewStyle().
-		Foreground(statusColor).
-		Render(statusText)
-
-	// Create the row with consistent formatting
-	row := fmt.Sprintf("%-30s │ %s", domainText, statusTextFormatted)
-
 	if isSelected {
-		// Use the same selected row styling as monitoring tab
 		return lipgloss.NewStyle().
-			Background(lipgloss.Color("#2E3440")).
-			Foreground(lipgloss.Color("#ECEFF4")).
-			Render(row)
-	} else {
-		return lipgloss.NewStyle().
-			Foreground(textColor).
-			Render(row)
+			Background(lipgloss.Color("#3B82F6")). // Blue background for selected
+			Foreground(lipgloss.Color("#FFFFFF")). // White text
+			Padding(0, 1).
+			Render("• " + domain)
 	}
+	return "  " + domain
 }
 
-func formatTableRow(domain string, count int, timestamp time.Time, status string, isSelected bool) string {
-	// Format each column with proper width
-	domainCol := fmt.Sprintf("%-30s", truncateString(domain, 25))
-	countCol := fmt.Sprintf("%6d", count)
-	timeCol := fmt.Sprintf("%-10s", timestamp.Format("15:04:05"))
-	statusCol := status
+func formatTableRow(domain string, count int, timestamp time.Time, status string, isSelected bool, recentlyChanged bool) string {
+	row := fmt.Sprintf("%-40s %-10s %-20s %s", domain, status, timestamp.Format("15:04:05"), "No")
 
-	// Combine columns
-	rowText := fmt.Sprintf("%s │ %s │ %s │ %s", domainCol, countCol, timeCol, statusCol)
-
-	// Apply styling based on selection
 	if isSelected {
-		rowStyle := lipgloss.NewStyle().
-			Background(lipgloss.Color("#2E3440")). // Dark gray background
-			Foreground(lipgloss.Color("#ECEFF4")). // Light text
-			Bold(true)
-		return rowStyle.Render(rowText)
-	} else {
-		rowStyle := lipgloss.NewStyle().Foreground(textColor)
-		return rowStyle.Render(rowText)
+		return lipgloss.NewStyle().
+			Background(lipgloss.Color("#3B82F6")). // Blue background for selected
+			Foreground(lipgloss.Color("#FFFFFF")). // White text
+			Padding(0, 1).
+			Render(row)
+	} else if recentlyChanged {
+		return lipgloss.NewStyle().
+			Background(lipgloss.Color("#8B5CF6")). // Purple background for recently changed
+			Foreground(lipgloss.Color("#FFFFFF")). // White text
+			Padding(0, 1).
+			Render(row)
 	}
+
+	return "  " + row
 }
 
 func (m Model) isInAllowlist(domain string) bool {
-	for _, allowed := range m.monitoring.allowlist {
-		if allowed == domain {
+	for _, allowedDomain := range m.monitoring.allowlist {
+		if allowedDomain == domain {
 			return true
 		}
 	}
 	return false
-}
-
-func (m Model) removeFromAllowlist(domain string) {
-	newAllowlist := make([]string, 0, len(m.monitoring.allowlist))
-	for _, allowed := range m.monitoring.allowlist {
-		if allowed != domain {
-			newAllowlist = append(newAllowlist, allowed)
-		}
-	}
-	m.monitoring.allowlist = newAllowlist
-}
-
-func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen-3] + "..."
 }
 
 func max(a, b int) int {
@@ -1097,7 +875,7 @@ func max(a, b int) int {
 
 func min(a, b int) int {
 	if a < b {
-		return b
+		return a
 	}
-	return a
+	return b
 }

@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/berbyte/sinkzone/cmd"
-	_ "modernc.org/sqlite"
 )
 
 func main() {

@@ -40,6 +40,15 @@
   - [3. Set System DNS to Localhost](#3-set-system-dns-to-localhost)
   - [4. Launch the UI](#4-launch-the-ui)
   - [5. Enable Focus Mode](#5-enable-focus-mode)
+- [Docker Deployment](#docker-deployment)
+  - [Quick Start](#quick-start-1)
+  - [Docker Commands](#docker-commands)
+  - [Docker Configuration](#docker-configuration)
+- [Demos](#demos)
+  - [Command Line Interface (CLI)](#command-line-interface-cli)
+  - [Terminal User Interface (TUI)](#terminal-user-interface-tui)
+- [Documentation](#documentation)
+  - [Manual Page](#manual-page)
 - [Usage](#usage)
   - [Common Commands](#common-commands)
   - [TUI Navigation](#tui-navigation)
@@ -47,9 +56,6 @@
   - [Architecture](#architecture)
   - [Normal Mode](#normal-mode)
   - [Focus Mode](#focus-mode)
-- [Service Management](#service-management)
-  - [Linux (systemd)](#linux-systemd)
-  - [macOS (launchd)](#macos-launchd)
 - [Configuration](#configuration)
 - [Development](#development)
 - [License](#license)
@@ -62,9 +68,13 @@
 ---
 ## What is Sinkzone?
 
-Sinkzone is a local DNS resolver and terminal UI (TUI) that helps you eliminate distractions and get deep work done. It blocks all domains by default — only the ones you explicitly allow can get through. This means notifications, social media, news, and other time-sinks are unreachable at the network level — not just in your browser.
+Sinkzone is a local DNS resolver that helps you eliminate distractions and get deep work done. It blocks all domains by default — only the ones you explicitly allow can get through. This means notifications, social media, news, and other time-sinks are unreachable at the network level — not just in your browser.
 
-It’s lightweight, cross-platform, and built for hackers, makers, and anyone serious about focus.
+It's lightweight, cross-platform, and built for hackers, makers, and anyone serious about focus.
+
+![Sinkzone TUI](examples/tui-screenshot.png)
+
+*The Sinkzone Terminal User Interface showing real-time DNS monitoring and allowlist management*
 
 ## Motivation
 
@@ -84,7 +94,7 @@ Now I can code for hours uninterrupted. Even my son uses Sinkzone during chess p
 - **Focus Mode**: Block all but allowlisted domains for a set duration
 - **Terminal UI**: Real-time DNS traffic viewer with tabbed interface
 - **Memory-backed rules**: Focus mode expires automatically
-- **Cross-platform**: Works on macOS, Linux, and Windows
+- **Cross-platform**: Works on macOS and Linux
 
 ---
 
@@ -128,27 +138,109 @@ sudo networksetup -setdnsservers "Wi-Fi" 127.0.0.1
 echo "nameserver 127.0.0.1" | sudo tee /etc/resolv.conf
 ```
 
-**Windows:**
-
-* Go to Network Settings → Adapter Options → IPv4 Settings → Use DNS `127.0.0.1`
-
-> 💡 On some platforms, you may need to persist DNS settings with a launch script or system manager.
-
 ### 4. Launch the UI
 
 In a second terminal:
 
 ```bash
-sinkzone
+sinkzone tui
+```
+
+Or check recent DNS requests:
+
+```bash
+sinkzone monitor
+```
+
+Add domains to your allowlist:
+
+```bash
+sinkzone allowlist add github.com
 ```
 
 ### 5. Enable Focus Mode
 
 ```bash
-sinkzone focus 1h
+sinkzone focus start
 ```
 
 Or press `f` in the TUI.
+
+---
+
+## Docker Deployment
+
+For easy deployment on any platform (including Windows), use the official Docker image:
+
+### Quick Start
+
+```bash
+# Pull and run the latest image
+docker run -d \
+  --name sinkzone \
+  --network host \
+  --cap-add NET_BIND_SERVICE \
+  --restart unless-stopped \
+  ghcr.io/berbyte/sinkzone:latest
+```
+
+### Docker Commands
+
+```bash
+# Check status
+docker exec sinkzone ./sinkzone status
+
+# View DNS requests
+docker exec sinkzone ./sinkzone monitor
+
+# Enable focus mode
+docker exec sinkzone ./sinkzone focus start
+
+# View logs
+docker logs -f sinkzone
+
+# Stop container
+docker stop sinkzone
+```
+
+### Docker Configuration
+
+The Docker image includes:
+- **Multi-platform**: Supports linux/amd64 and linux/arm64
+- **Host networking**: Binds directly to port 53
+- **Health checks**: Automatic monitoring
+- **Auto-restart**: Container restarts automatically
+
+---
+
+## Demos
+
+### Command Line Interface (CLI)
+
+The CLI offers powerful command-line tools for system management:
+
+![CLI Demo](examples/demo-cli.gif)
+
+*Command-line allowlist management, focus mode control, and system status monitoring*
+
+### Terminal User Interface (TUI)
+
+The TUI provides real-time DNS monitoring and allowlist management:
+
+![TUI Demo](examples/demo-tui.gif)
+
+*Real-time DNS traffic monitoring, allowlist management, and focus mode control*
+
+---
+
+## Documentation
+
+### Manual Page
+
+For detailed documentation, run:
+```bash
+sinkzone man
+```
 
 ---
 
@@ -158,11 +250,17 @@ Or press `f` in the TUI.
 
 | Command                  | Description                    |
 | ------------------------ | ------------------------------ |
-| `sinkzone`               | Launch the terminal UI         |
+| `sinkzone monitor`       | Show last 20 DNS requests      |
+| `sinkzone tui`           | Launch the terminal UI         |
 | `sudo sinkzone resolver` | Start DNS resolver on port 53  |
-| `sinkzone focus 1h`      | Enable focus mode for 1 hour   |
-| `sinkzone disable-focus` | Disable focus mode immediately |
+| `sinkzone focus start`   | Enable focus mode for 1 hour   |
+| `sinkzone focus --disable` | Disable focus mode immediately |
 | `sinkzone status`        | View current focus mode state  |
+| `sinkzone allowlist add <domain>` | Add domain to allowlist |
+| `sinkzone allowlist remove <domain>` | Remove domain from allowlist |
+| `sinkzone allowlist list` | List all allowed domains |
+| `sinkzone config set resolver <ip>` | Set resolver IP |
+| `sinkzone man` | Show manual page |
 
 ### TUI Navigation
 
@@ -175,10 +273,6 @@ Or press `f` in the TUI.
   * **Allowlist**: Add or remove allowed domains
   * **Settings**: DNS resolver config
 
-> ![TUI Screenshot Placeholder](https://share.ber.sh/sinkzone-demo.gif)
-> *Demo: DNS monitoring and focus toggle*
-
----
 
 ## How It Works
 
@@ -186,8 +280,8 @@ Or press `f` in the TUI.
 
 Sinkzone is composed of two parts:
 
-* **Resolver**: A local DNS server that intercepts queries.
-* **TUI**: A terminal UI for interacting with and monitoring the system.
+* **Resolver**: A local DNS server that intercepts queries and maintains real-time data via Unix socket.
+* **TUI**: A terminal UI for interacting with and monitoring the system via socket communication.
 
 ### Normal Mode
 
@@ -199,26 +293,6 @@ Sinkzone is composed of two parts:
 * Only allowlisted domains resolve
 * Everything else returns `NXDOMAIN`
 * Automatically expires after specified duration
-* Red visual banner in the TUI
-
----
-
-## Service Management
-
-### Linux (systemd)
-
-```bash
-sudo systemctl enable sinkzone-resolver
-sudo systemctl start sinkzone-resolver
-```
-
-### macOS (launchd)
-
-```bash
-sudo launchctl load /Library/LaunchDaemons/com.berbyte.sinkzone.resolver.plist
-```
-
-> 📝 Example service files are available in the [`contrib/`](contrib/) folder.
 
 ---
 
@@ -227,8 +301,8 @@ sudo launchctl load /Library/LaunchDaemons/com.berbyte.sinkzone.resolver.plist
 Files are stored in `~/.sinkzone/`:
 
 * `sinkzone.yaml`: Main config
-* `sinkzone.db`: SQLite database of DNS queries and allowlist
-* `state.json`: Focus mode tracking
+* `sinkzone.sock`: Unix socket for real-time communication between resolver and TUI
+* `allowlist.txt`: Simple text file containing allowed domains
 
 ---
 
