@@ -27,5 +27,5 @@ EXPOSE 53/udp
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD nslookup github.com 127.0.0.1:53 || exit 1
 
-# Run the DNS resolver
-CMD ["./sinkzone", "resolver"] 
+# Set sinkzone as entrypoint
+ENTRYPOINT ["./sinkzone"] 

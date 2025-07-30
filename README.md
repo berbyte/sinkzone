@@ -35,15 +35,9 @@
 - [Motivation](#motivation)
 - [Key Features](#key-features)
 - [Quick Start](#quick-start)
-  - [1. Install](#1-install)
-  - [2. Start the DNS Resolver](#2-start-the-dns-resolver)
-  - [3. Set System DNS to Localhost](#3-set-system-dns-to-localhost)
-  - [4. Launch the UI](#4-launch-the-ui)
-  - [5. Enable Focus Mode](#5-enable-focus-mode)
-- [Docker Deployment](#docker-deployment)
-  - [Quick Start](#quick-start-1)
-  - [Docker Commands](#docker-commands)
-  - [Docker Configuration](#docker-configuration)
+  - [Docker (Recommended)](#docker-recommended)
+  - [Configure System DNS (Required)](#configure-system-dns-required)
+  - [Alternative Installation Methods](#alternative-installation-methods)
 - [Demos](#demos)
   - [Command Line Interface (CLI)](#command-line-interface-cli)
   - [Terminal User Interface (TUI)](#terminal-user-interface-tui)
@@ -72,19 +66,19 @@ Sinkzone is a local DNS resolver that helps you eliminate distractions and get d
 
 It's lightweight, cross-platform, and built for hackers, makers, and anyone serious about focus.
 
-![Sinkzone TUI](examples/tui-screenshot.png)
-
-*The Sinkzone Terminal User Interface showing real-time DNS monitoring and allowlist management*
-
 ## Motivation
 
-Most tools make you list what you want to block. But the internet is infinite — that list never ends. It’s much easier to list the few things you actually want to allow.
+Most tools make you list what you want to block. But the internet is infinite — that list never ends. It's much easier to list the few things you actually want to allow.
 
 Sinkzone was born from that insight. I was tired of coding sessions interrupted by Slack pings and email alerts. I needed something stronger than a browser plugin — a system-level kill switch for distractions.
 
 Now I can code for hours uninterrupted. Even my son uses Sinkzone during chess practice to stay focused.
 
 **Sinkzone exists because I needed it. Maybe you do too.**
+
+![Sinkzone TUI](examples/tui-screenshot.png)
+
+*The Sinkzone Terminal User Interface showing real-time DNS monitoring and allowlist management*
 
 ---
 
@@ -100,79 +94,9 @@ Now I can code for hours uninterrupted. Even my son uses Sinkzone during chess p
 
 ## Quick Start
 
-### 1. Install
+### Docker (Recommended)
 
-**Homebrew (macOS):**
-```bash
-brew tap berbyte/ber
-brew install berbyte/ber/sinkzone
-xattr -d com.apple.quarantine $(which sinkzone)
-````
-
-**Manual (all platforms):**
-
-```bash
-# Download from https://github.com/berbyte/sinkzone/releases or build from source
-go build -o sinkzone .
-```
-
-### 2. Start the DNS Resolver
-
-Port 53 requires root privileges:
-
-```bash
-sudo sinkzone resolver
-```
-
-### 3. Set System DNS to Localhost
-
-**macOS:**
-
-```bash
-sudo networksetup -setdnsservers "Wi-Fi" 127.0.0.1
-```
-
-**Linux:**
-
-```bash
-echo "nameserver 127.0.0.1" | sudo tee /etc/resolv.conf
-```
-
-### 4. Launch the UI
-
-In a second terminal:
-
-```bash
-sinkzone tui
-```
-
-Or check recent DNS requests:
-
-```bash
-sinkzone monitor
-```
-
-Add domains to your allowlist:
-
-```bash
-sinkzone allowlist add github.com
-```
-
-### 5. Enable Focus Mode
-
-```bash
-sinkzone focus start
-```
-
-Or press `f` in the TUI.
-
----
-
-## Docker Deployment
-
-For easy deployment on any platform (including Windows), use the official Docker image:
-
-### Quick Start
+The easiest way to run Sinkzone on any platform:
 
 ```bash
 # Pull and run the latest image
@@ -181,35 +105,91 @@ docker run -d \
   --network host \
   --cap-add NET_BIND_SERVICE \
   --restart unless-stopped \
-  ghcr.io/berbyte/sinkzone:latest
+  -v ~/.sinkzone:/app/.sinkzone \
+  ghcr.io/berbyte/sinkzone:latest resolver
 ```
 
-### Docker Commands
+**That's it!** Sinkzone is now running and blocking distractions at the DNS level.
 
+**Next steps:**
 ```bash
 # Check status
-docker exec sinkzone ./sinkzone status
+docker exec sinkzone status
 
 # View DNS requests
-docker exec sinkzone ./sinkzone monitor
+docker exec sinkzone monitor
+
+# Add github.com
+docker exec sinkzone allowlist add github.com
 
 # Enable focus mode
-docker exec sinkzone ./sinkzone focus start
+docker exec sinkzone focus start
 
 # View logs
 docker logs -f sinkzone
-
-# Stop container
-docker stop sinkzone
 ```
 
-### Docker Configuration
+### Configure System DNS (Required)
 
-The Docker image includes:
-- **Multi-platform**: Supports linux/amd64 and linux/arm64
-- **Host networking**: Binds directly to port 53
-- **Health checks**: Automatic monitoring
-- **Auto-restart**: Container restarts automatically
+**Important:** You must configure your system to use Sinkzone as the DNS resolver for it to work.
+
+**macOS:**
+```bash
+sudo networksetup -setdnsservers "Wi-Fi" 127.0.0.1
+```
+
+**Linux:**
+```bash
+echo "nameserver 127.0.0.1" | sudo tee /etc/resolv.conf
+```
+
+**Windows:**
+- Open Network & Internet settings
+- Change adapter options
+- Right-click your network adapter → Properties
+- Select "Internet Protocol Version 4 (TCP/IPv4)" → Properties
+- Select "Use the following DNS server addresses"
+- Enter `127.0.0.1` as the preferred DNS server
+
+### Alternative Installation Methods
+
+<details>
+<summary><b>📦 Package Managers</b></summary>
+
+**Homebrew (macOS):**
+```bash
+brew tap berbyte/ber
+brew install berbyte/ber/sinkzone
+xattr -d com.apple.quarantine $(which sinkzone)
+```
+
+**Manual Setup:**
+```bash
+# 1. Start the DNS Resolver (requires root)
+sudo sinkzone resolver
+
+# 2. Launch the UI (in another terminal)
+sinkzone tui
+
+# 3. Enable Focus Mode
+sinkzone focus start
+```
+
+</details>
+
+<details>
+<summary><b>🔨 Build from Source</b></summary>
+
+```bash
+# Clone and build
+git clone https://github.com/berbyte/sinkzone.git
+cd sinkzone
+go build -o sinkzone .
+
+# Follow the manual setup steps above
+```
+
+</details>
 
 ---
 
