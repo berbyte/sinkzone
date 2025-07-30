@@ -8,17 +8,22 @@ Set Padding 10
 Set WindowBar Colorful
 Set BorderRadius 10
 
-Type "# Hello, This is sinkzone"
-Sleep 4s
+Hide
+Type "sinkzone allowlist remove github.com && clear"
 Enter
+Show
 
+
+Type "# Hello, this is sinkzone! 👋"
+Enter
 Type "# Let's inspect your current DNS requests"
 Sleep 500ms
 Enter
-Type "sinkzone monitor | tail -10"
+
+Type "sinkzone monitor | head -10"
 Sleep 500ms
 Enter
-Sleep 4s
+Sleep 2s
 
 Type "# Let's allow github.com"
 Sleep 500ms
@@ -26,7 +31,7 @@ Enter
 Type "sinkzone allowlist add github.com"
 Sleep 500ms
 Enter
-Sleep 4s
+Sleep 2s
 
 Type "# Let's start a focus session"
 Sleep 500ms
@@ -34,7 +39,7 @@ Enter
 Type "sinkzone focus start"
 Sleep 500ms
 Enter
-Sleep 4s
+Sleep 2s
 
 Type "# google.com won't resolve"
 Sleep 500ms
@@ -42,7 +47,7 @@ Enter
 Type "dig google.com"
 Sleep 500ms
 Enter
-Sleep 4s
+Sleep 2s
 
 Type "# github.com is allowed"
 Sleep 500ms
@@ -52,5 +57,5 @@ Sleep 500ms
 Enter
 
 
-Type "Now you can work hard!"
+Type "Enjoy the silence! :)"
 Sleep 10s
