@@ -45,7 +45,7 @@ nfpms:
     contents:
       - src: dist/{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}*/{{ .Binary }}
         dst: /usr/local/bin/{{ .Binary }}
-      - src: dist/{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}*/docs/sinkzone.1
+      - src: docs/sinkzone.1
         dst: /usr/local/share/man/man1/sinkzone.1
 
 changelog:
