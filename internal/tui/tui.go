@@ -556,6 +556,8 @@ func (m Model) updateMonitoring(msg tea.KeyMsg) (Model, tea.Cmd) {
 						m.monitoring.allowlist = m.socketClient.GetAllowlist()
 						m.lastChangedDomain = selectedDomain
 						m.lastChangeTime = time.Now()
+						// Reload allowlist data to update the display
+						m.loadAllowlistData()
 					}
 				}
 			} else {
@@ -566,6 +568,8 @@ func (m Model) updateMonitoring(msg tea.KeyMsg) (Model, tea.Cmd) {
 						m.monitoring.allowlist = m.socketClient.GetAllowlist()
 						m.lastChangedDomain = selectedDomain
 						m.lastChangeTime = time.Now()
+						// Reload allowlist data to update the display
+						m.loadAllowlistData()
 					}
 				}
 			}
@@ -629,9 +633,10 @@ func (m Model) View() string {
 	// Render header with banner animation
 	bannerText := ""
 	if m.animationDone {
-		bannerText = sinkzoneBanner
+		bannerText = "\n" + sinkzoneBanner // Add newline to start from 2nd line
 	} else {
-		// Show animated banner
+		// Show animated banner starting from 2nd line
+		bannerText = "\n" // Start from 2nd line
 		for i := 0; i <= m.currentLine && i < len(m.bannerLines); i++ {
 			bannerText += m.bannerLines[i] + "\n"
 		}
@@ -642,7 +647,7 @@ func (m Model) View() string {
 	}
 
 	// Calculate consistent heights to prevent jiggling
-	headerHeight := lipgloss.Height(headerStyle.Render(sinkzoneBanner)) // Use full banner height
+	headerHeight := lipgloss.Height(headerStyle.Render(sinkzoneBanner)) + 2 // Add padding for banner
 	tabHeight := 1
 	footerHeight := 1
 
@@ -671,10 +676,10 @@ func (m Model) View() string {
 		focusHeaderStyle := headerStyle.Copy().
 			Background(lipgloss.Color("#2D1B1B")). // Dark red background
 			Foreground(lipgloss.Color("#FF6B6B"))  // Red text
-		header = focusHeaderStyle.Width(m.width).Height(headerHeight).Align(lipgloss.Center).Render(headerContent)
+		header = focusHeaderStyle.Width(m.width).Height(headerHeight).Align(lipgloss.Center).Padding(1, 0).Render(headerContent)
 	} else {
 		// Always render header with full height to prevent jiggling
-		header = headerStyle.Width(m.width).Height(headerHeight).Align(lipgloss.Center).Render(bannerText)
+		header = headerStyle.Width(m.width).Height(headerHeight).Align(lipgloss.Center).Padding(1, 0).Render(bannerText)
 	}
 
 	// Render tabs
@@ -719,8 +724,8 @@ Press ←/→ to switch to other tabs.`
 	var content string
 	if m.activeTab == 0 { // Monitoring tab - use fixed height
 		content = contentStyle.Width(m.width - 4).Height(contentHeight).Render(contentText)
-	} else { // Allowlist tab - use flexible height
-		content = contentStyle.Width(m.width - 4).Render(contentText)
+	} else { // Allowlist tab - use flexible height but ensure it doesn't exceed available space
+		content = contentStyle.Width(m.width - 4).Height(contentHeight).Render(contentText)
 	}
 
 	// Footer with full width
@@ -755,19 +760,25 @@ Make sure the resolver is running with 'sudo sinkzone resolver'`
 		startIndex = len(m.monitoring.dnsQueries) - maxEntries
 	}
 
+	// Show newest entries at the top (reverse the slice)
 	queries := m.monitoring.dnsQueries[startIndex:]
+	// Reverse the slice to show newest first
+	for i, j := 0, len(queries)-1; i < j; i, j = i+1, j-1 {
+		queries[i], queries[j] = queries[j], queries[i]
+	}
 
 	// Header
-	header := fmt.Sprintf("DNS Monitoring (%d queries)\n", len(m.monitoring.dnsQueries))
-	header += fmt.Sprintf("%-40s %-10s %-20s %s\n", "Domain", "Status", "Time", "Blocked")
-	header += strings.Repeat("-", 80) + "\n"
+	header := fmt.Sprintf("%-40s %-20s %-10s\n", "Domain", "Time", "Status")
+	header += strings.Repeat("-", 70) + "\n"
 
 	// Table rows
 	var rows []string
 	for i, query := range queries {
-		status := "ALLOWED"
-		if query.Blocked {
-			status = "BLOCKED"
+		// Check if domain is in allowlist
+		isInAllowlist := m.isInAllowlist(query.Domain)
+		status := "BLOCK"
+		if isInAllowlist {
+			status = "ALLOW"
 		}
 
 		// Truncate domain if too long
@@ -776,11 +787,14 @@ Make sure the resolver is running with 'sudo sinkzone resolver'`
 			domain = domain[:35] + "..."
 		}
 
-		// Check if this row is selected
-		isSelected := (i + startIndex) == m.monitoring.tableCursor
+		// Check if this row is selected (adjust for reversed display)
+		// Since we reversed the display, we need to map the cursor position
+		displayIndex := len(queries) - 1 - i
+		actualIndex := startIndex + displayIndex
+		isSelected := actualIndex == m.monitoring.tableCursor
 		recentlyChanged := query.Domain == m.lastChangedDomain && time.Since(m.lastChangeTime) < 2*time.Second
 
-		row := formatTableRow(domain, 1, query.Timestamp, status, isSelected, recentlyChanged)
+		row := formatTableRow(domain, query.Timestamp, status, isSelected, recentlyChanged)
 		rows = append(rows, row)
 	}
 
@@ -837,8 +851,8 @@ func formatAllowedDomainRow(domain string, isSelected bool) string {
 	return "  " + domain
 }
 
-func formatTableRow(domain string, count int, timestamp time.Time, status string, isSelected bool, recentlyChanged bool) string {
-	row := fmt.Sprintf("%-40s %-10s %-20s %s", domain, status, timestamp.Format("15:04:05"), "No")
+func formatTableRow(domain string, timestamp time.Time, status string, isSelected bool, recentlyChanged bool) string {
+	row := fmt.Sprintf("%-40s %-20s %-10s", domain, timestamp.Format("15:04:05"), status)
 
 	if isSelected {
 		return lipgloss.NewStyle().
@@ -854,11 +868,11 @@ func formatTableRow(domain string, count int, timestamp time.Time, status string
 			Render(row)
 	}
 
-	return "  " + row
+	return row
 }
 
 func (m Model) isInAllowlist(domain string) bool {
-	for _, allowedDomain := range m.monitoring.allowlist {
+	for _, allowedDomain := range m.allowedDomains.domains {
 		if allowedDomain == domain {
 			return true
 		}
