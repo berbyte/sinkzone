@@ -81,10 +81,6 @@ dockers:
       - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Version }}"
       - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:latest"
     dockerfile: Dockerfile
-    use: buildx
-    build_flag_templates:
-      - "--platform=linux/amd64"
-      - "--platform=linux/arm64"
     extra_files:
       - docs/sinkzone.1
 
