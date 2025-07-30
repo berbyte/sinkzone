@@ -83,6 +83,9 @@ dockers:
     dockerfile: Dockerfile
     extra_files:
       - docs/sinkzone.1
+    build_flag_templates:
+      - "--build-arg=GO_MOD_FILE=go.mod"
+      - "--build-arg=GO_SUM_FILE=go.sum"
 
 release:
   name_template: 'v{{ .Version }}'
