@@ -35,7 +35,7 @@
 - [Motivation](#motivation)
 - [Key Features](#key-features)
 - [Quick Start](#quick-start)
-  - [Docker (Recommended)](#docker-recommended)
+  - [Docker](#docker)
   - [Configure System DNS (Required)](#configure-system-dns-required)
   - [Alternative Installation Methods](#alternative-installation-methods)
 - [Demos](#demos)
@@ -94,7 +94,7 @@ Now I can code for hours uninterrupted. Even my son uses Sinkzone during chess p
 
 ## Quick Start
 
-### Docker (Recommended)
+### Docker
 
 The easiest way to run Sinkzone on any platform:
 
