@@ -380,8 +380,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Get new records from socket
 				newQueries := m.socketClient.GetQueries()
 				if len(newQueries) > 0 {
+
+					// Calculate how many entries we can display
+					headerHeight := lipgloss.Height(headerStyle.Render(sinkzoneBanner)) + 2
+					tabHeight := 1
+					footerHeight := 1
+					contentHeight := m.height - headerHeight - tabHeight - footerHeight - 2
+					maxVisibleEntries := contentHeight - 4 // Account for header, footer, and padding
+					if maxVisibleEntries < 5 {
+						maxVisibleEntries = 5 // Minimum entries
+					}
+
+					// Truncate to only keep the most recent entries that fit
+					if len(newQueries) > maxVisibleEntries {
+						newQueries = newQueries[len(newQueries)-maxVisibleEntries:]
+					}
+
 					m.monitoring.dnsQueries = newQueries
 					m.monitoring.lastUpdate = time.Now()
+
 				}
 
 				// Update last refresh time
@@ -523,21 +540,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateMonitoring(msg tea.KeyMsg) (Model, tea.Cmd) {
-	// Calculate visible entries
-	maxEntries := 15
-	startIndex := 0
-	if len(m.monitoring.dnsQueries) > maxEntries {
-		startIndex = len(m.monitoring.dnsQueries) - maxEntries
-	}
-	visibleCount := min(maxEntries, len(m.monitoring.dnsQueries))
+	// Since we're now keeping only the visible entries, we can simplify this
+	visibleCount := len(m.monitoring.dnsQueries)
 
 	switch msg.String() {
 	case "up", "k":
-		if m.monitoring.tableCursor > startIndex {
+		if m.monitoring.tableCursor > 0 {
 			m.monitoring.tableCursor--
 		}
 	case "down", "j":
-		if m.monitoring.tableCursor < startIndex+visibleCount-1 {
+		if m.monitoring.tableCursor < visibleCount-1 {
 			m.monitoring.tableCursor++
 		}
 	case "space", "enter":
@@ -753,15 +765,8 @@ Try making some web requests to see DNS activity.
 Make sure the resolver is running with 'sudo sinkzone resolver'`
 	}
 
-	// Limit the number of entries to display to maintain fixed layout
-	maxEntries := 15 // Adjust based on available space
-	startIndex := 0
-	if len(m.monitoring.dnsQueries) > maxEntries {
-		startIndex = len(m.monitoring.dnsQueries) - maxEntries
-	}
-
-	// Show newest entries at the top (reverse the slice)
-	queries := m.monitoring.dnsQueries[startIndex:]
+	// Since we're now keeping only the visible entries, we can simplify this
+	queries := m.monitoring.dnsQueries
 	// Reverse the slice to show newest first
 	for i, j := 0, len(queries)-1; i < j; i, j = i+1, j-1 {
 		queries[i], queries[j] = queries[j], queries[i]
@@ -789,9 +794,9 @@ Make sure the resolver is running with 'sudo sinkzone resolver'`
 
 		// Check if this row is selected (adjust for reversed display)
 		// Since we reversed the display, we need to map the cursor position
-		displayIndex := len(queries) - 1 - i
-		actualIndex := startIndex + displayIndex
-		isSelected := actualIndex == m.monitoring.tableCursor
+		// The cursor position in the original array
+		originalIndex := len(queries) - 1 - i
+		isSelected := originalIndex == m.monitoring.tableCursor
 		recentlyChanged := query.Domain == m.lastChangedDomain && time.Since(m.lastChangeTime) < 2*time.Second
 
 		row := formatTableRow(domain, query.Timestamp, status, isSelected, recentlyChanged)
