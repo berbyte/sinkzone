@@ -3,10 +3,6 @@ FROM alpine:latest
 # Install ca-certificates for HTTPS requests
 RUN apk --no-cache add ca-certificates
 
-# Create non-root user
-RUN addgroup -g 1001 -S sinkzone && \
-    adduser -u 1001 -S sinkzone -G sinkzone
-
 # Set working directory
 WORKDIR /app
 
@@ -14,11 +10,7 @@ WORKDIR /app
 COPY sinkzone .
 
 # Create config directory
-RUN mkdir -p /app/.sinkzone && \
-    chown -R sinkzone:sinkzone /app
-
-# Switch to non-root user
-USER sinkzone
+RUN mkdir -p /app/.sinkzone
 
 # Expose DNS port
 EXPOSE 53/udp

@@ -18,15 +18,17 @@ builds:
     binary: sinkzone
 
 archives:
-  - name_template: >-
-      {{ .ProjectName }}_
-      {{- title .Os }}_
-      {{- if eq .Arch "amd64" }}x86_64
-      {{- else }}{{ .Arch }}{{ end }}
+  # Raw binaries for all platforms to avoid quarantine and provide consistency
+  - name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
+    format: binary
     files:
       - README.md
       - LICENSE
       - docs/sinkzone.1
+    builds_info:
+      - id: default
+        name: "{{ .ProjectName }}"
+        binary: "{{ .ProjectName }}"
 
 checksum:
   name_template: 'checksums.txt'
@@ -83,6 +85,10 @@ dockers:
     dockerfile: Dockerfile.releaser
     extra_files:
       - docs/sinkzone.1
+    use: buildx
+    platforms:
+      - linux/amd64
+      - linux/arm64
 
 release:
   name_template: 'v{{ .Version }}'

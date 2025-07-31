@@ -106,10 +106,23 @@ docker run -d \
   --cap-add NET_BIND_SERVICE \
   --restart unless-stopped \
   -v ~/.sinkzone:/app/.sinkzone \
+  --platform linux/amd64 \
   ghcr.io/berbyte/sinkzone:latest resolver
 ```
 
 **That's it!** Sinkzone is now running and blocking distractions at the DNS level.
+
+**Note:** If you're on Apple Silicon (M1/M2), you may need to specify the platform explicitly:
+```bash
+docker run -d \
+  --name sinkzone \
+  --network host \
+  --cap-add NET_BIND_SERVICE \
+  --restart unless-stopped \
+  -v ~/.sinkzone:/app/.sinkzone \
+  --platform linux/amd64 \
+  ghcr.io/berbyte/sinkzone:latest resolver
+```
 
 **Next steps:**
 ```bash
@@ -160,7 +173,6 @@ echo "nameserver 127.0.0.1" | sudo tee /etc/resolv.conf
 ```bash
 brew tap berbyte/ber
 brew install berbyte/ber/sinkzone
-xattr -d com.apple.quarantine $(which sinkzone)
 ```
 
 **Manual Setup:**
@@ -187,6 +199,39 @@ cd sinkzone
 go build -o sinkzone .
 
 # Follow the manual setup steps above
+```
+
+</details>
+
+<details>
+<summary><b>📥 Direct Download</b></summary>
+
+Download the appropriate binary for your platform:
+
+**macOS:**
+```bash
+# Apple Silicon (M1/M2)
+curl -L -o sinkzone https://github.com/berbyte/sinkzone/releases/latest/download/sinkzone-darwin-arm64
+chmod +x sinkzone
+sudo mv sinkzone /usr/local/bin/
+
+# Intel Mac
+curl -L -o sinkzone https://github.com/berbyte/sinkzone/releases/latest/download/sinkzone-darwin-amd64
+chmod +x sinkzone
+sudo mv sinkzone /usr/local/bin/
+```
+
+**Linux:**
+```bash
+# AMD64
+curl -L -o sinkzone https://github.com/berbyte/sinkzone/releases/latest/download/sinkzone-linux-amd64
+chmod +x sinkzone
+sudo mv sinkzone /usr/local/bin/
+
+# ARM64
+curl -L -o sinkzone https://github.com/berbyte/sinkzone/releases/latest/download/sinkzone-linux-arm64
+chmod +x sinkzone
+sudo mv sinkzone /usr/local/bin/
 ```
 
 </details>
