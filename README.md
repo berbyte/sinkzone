@@ -112,17 +112,7 @@ docker run -d \
 
 **That's it!** Sinkzone is now running and blocking distractions at the DNS level.
 
-**Note:** If you're on Apple Silicon (M1/M2), you may need to specify the platform explicitly:
-```bash
-docker run -d \
-  --name sinkzone \
-  --network host \
-  --cap-add NET_BIND_SERVICE \
-  --restart unless-stopped \
-  -v ~/.sinkzone:/app/.sinkzone \
-  --platform linux/amd64 \
-  ghcr.io/berbyte/sinkzone:latest resolver
-```
+**Note:** Docker images are available for both Intel and Apple Silicon architectures and will be automatically selected based on your platform.
 
 **Next steps:**
 ```bash

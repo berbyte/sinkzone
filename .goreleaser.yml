@@ -41,3 +41,14 @@ brews:
       owner: berbyte
       name: homebrew-tap
       token: "{{ .Env.GH_PAT }}"
+
+# Docker images
+dockers:
+  - image_templates:
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Version }}"
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:latest"
+    dockerfile: Dockerfile.releaser
+    extra_files:
+      - docs/sinkzone.1
+    use: buildx
+
