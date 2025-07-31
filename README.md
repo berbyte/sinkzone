@@ -102,17 +102,17 @@ The easiest way to run Sinkzone on any platform:
 # Pull and run the latest image
 docker run -d \
   --name sinkzone \
-  --network host \
-  --cap-add NET_BIND_SERVICE \
+  -p 53:5353/udp \
   --restart unless-stopped \
   -v ~/.sinkzone:/app/.sinkzone \
-  --platform linux/amd64 \
-  ghcr.io/berbyte/sinkzone:latest resolver
+  ghcr.io/berbyte/sinkzone:latest resolver --port 5353
 ```
 
 **That's it!** Sinkzone is now running and blocking distractions at the DNS level.
 
 **Note:** Docker images are available for both Intel and Apple Silicon architectures and will be automatically selected based on your platform.
+
+**Security:** The Docker container runs as a non-root user and binds to an unprivileged port (5353) internally, which is then exposed as port 53 on the host. This eliminates the need for root privileges while maintaining the same functionality.
 
 **Next steps:**
 ```bash
@@ -130,6 +130,9 @@ docker exec sinkzone focus start
 
 # View logs
 docker logs -f sinkzone
+
+# Run any other sinkzone command
+docker exec sinkzone --help
 ```
 
 ### Configure System DNS (Required)
@@ -167,8 +170,11 @@ brew install berbyte/ber/sinkzone
 
 **Manual Setup:**
 ```bash
-# 1. Start the DNS Resolver (requires root)
+# 1. Start the DNS Resolver (default port 53, requires root)
 sudo sinkzone resolver
+
+# Or use an unprivileged port (no root required)
+sinkzone resolver --port 5353
 
 # 2. Launch the UI (in another terminal)
 sinkzone tui

@@ -3,21 +3,29 @@ FROM alpine:latest
 # Install ca-certificates for HTTPS requests
 RUN apk --no-cache add ca-certificates
 
+# Create non-root user
+RUN addgroup -g 1001 -S sinkzone && \
+    adduser -u 1001 -S sinkzone -G sinkzone
+
 # Set working directory
 WORKDIR /app
 
 # Copy the pre-compiled binary (will be provided by goreleaser)
 COPY sinkzone .
 
-# Create config directory
-RUN mkdir -p /app/.sinkzone
+# Create config directory and set ownership
+RUN mkdir -p /app/.sinkzone && \
+    chown -R sinkzone:sinkzone /app
 
-# Expose DNS port
-EXPOSE 53/udp
+# Switch to non-root user
+USER sinkzone
+
+# Expose unprivileged DNS port
+EXPOSE 5353/udp
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD nslookup github.com 127.0.0.1:53 || exit 1
+    CMD nslookup github.com 127.0.0.1:5353 || exit 1
 
 # Set sinkzone as entrypoint
 ENTRYPOINT ["./sinkzone"] 

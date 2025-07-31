@@ -43,9 +43,16 @@ type Server struct {
 	focusMode    bool
 	focusEndTime *time.Time
 	focusMutex   sync.RWMutex
+
+	// DNS server configuration
+	port string
 }
 
 func NewServer(cfg *config.Config) *Server {
+	return NewServerWithPort(cfg, "53")
+}
+
+func NewServerWithPort(cfg *config.Config, port string) *Server {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		homeDir = "."
@@ -60,6 +67,7 @@ func NewServer(cfg *config.Config) *Server {
 		allowlistPath: allowlistPath,
 		allowlist:     make(map[string]bool),
 		recentQueries: make([]DNSQuery, 0, 100),
+		port:          port,
 	}
 }
 
@@ -100,11 +108,11 @@ func (s *Server) Start() error {
 	dns.HandleFunc(".", s.handleRequest)
 
 	s.server = &dns.Server{
-		Addr: ":53",
+		Addr: ":" + s.port,
 		Net:  "udp",
 	}
 
-	log.Printf("Starting DNS server on :53")
+	log.Printf("Starting DNS server on :%s", s.port)
 	return s.server.ListenAndServe()
 }
 

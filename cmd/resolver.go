@@ -3,12 +3,13 @@ package cmd
 import (
 	"fmt"
 	"log"
-	"os"
 
 	"github.com/berbyte/sinkzone/internal/config"
 	"github.com/berbyte/sinkzone/internal/dns"
 	"github.com/spf13/cobra"
 )
+
+var port string
 
 var resolverCmd = &cobra.Command{
 	Use:   "resolver",
@@ -20,21 +21,21 @@ This must be the first command you run. The resolver captures all outgoing DNS r
 Once running, other features like monitoring, allowlisting, and focus mode become active.
 `,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Check if running with administrator/root privileges (required for port 53)
-		if os.Geteuid() != 0 {
-			return fmt.Errorf("resolver command must be run as root (sudo) to bind to port 53")
-		}
-
 		// Load configuration
 		cfg, err := config.Load()
 		if err != nil {
 			return fmt.Errorf("failed to load config: %w", err)
 		}
 
-		// Create DNS server
-		server := dns.NewServer(cfg)
+		// Create DNS server with specified port
+		server := dns.NewServerWithPort(cfg, port)
 
-		log.Println("Starting sinkzone DNS resolver on :53")
+		log.Printf("Starting sinkzone DNS resolver on :%s", port)
 		return server.Start()
 	},
+}
+
+func init() {
+	resolverCmd.Flags().StringVarP(&port, "port", "p", "53", "Port to bind the DNS server to")
+	rootCmd.AddCommand(resolverCmd)
 }
