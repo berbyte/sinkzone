@@ -1,84 +1,43 @@
 version: 2
 
+project_name: sinkzone
+
+force_token: github
+
 before:
   hooks:
-    - go mod tidy
+    - go mod download
 
 builds:
-  - env:
+  - binary: sinkzone
+    env:
       - CGO_ENABLED=0
-    goos:
-      - linux
-      - darwin
     goarch:
       - amd64
       - arm64
-    ldflags:
-      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
-    binary: sinkzone
+    goos:
+      - darwin
+      - linux
+    flags:
+      - -trimpath
 
 archives:
   - name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
-    format: binary
+    formats:
+      - binary
 
 checksum:
-  name_template: 'checksums.txt'
-
-# Native packages
-nfpms:
-  - maintainer: "dOMiNiS <dominis@ber.run>"
-    description: "DNS-based productivity tool"
-    homepage: "https://github.com/berbyte/sinkzone"
-    license: "MIT"
-    formats:
-      - deb
-      - rpm
-      - apk
-      - archlinux
-    contents:
-      - src: dist/{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}*/{{ .Binary }}
-        dst: /usr/local/bin/{{ .Binary }}
-      - src: docs/sinkzone.1
-        dst: /usr/local/share/man/man1/sinkzone.1
+  name_template: checksums.txt
 
 changelog:
-  sort: asc
-  filters:
-    exclude:
-      - '^docs:'
-      - '^test:'
-      - '^ci:'
-      - Merge pull request
-      - Merge branch
+  use: github
 
-homebrew_casks:
+brews:
   - name: sinkzone
-    homepage: "https://github.com/berbyte/sinkzone"
-    description: "A strict DNS filter to help you stay focused — or keep your kids safe"
+    description: A strict DNS filter to help you stay focused — or keep your kids safe
+    homepage: https://github.com/berbyte/sinkzone
+    license: MIT
     repository:
       owner: berbyte
-      name: homebrew-ber
-      branch: main
+      name: homebrew-tap
       token: "{{ .Env.GH_PAT }}"
-    commit_author:
-      name: goreleaserbot
-      email: bot@goreleaser.com
-    url:
-      template: "https://github.com/berbyte/sinkzone/releases/download/v{{ .Version }}/{{ .ArtifactName }}"
-    commit_msg_template: "Update {{ .ProjectName }} to v{{ .Version }}"
-
-
-# Docker images
-dockers:
-  - image_templates:
-      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Version }}"
-      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:latest"
-    dockerfile: Dockerfile.releaser
-    extra_files:
-      - docs/sinkzone.1
-    use: buildx
-
-release:
-  name_template: 'v{{ .Version }}'
-  draft: false
-  prerelease: false 
