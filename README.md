@@ -1,5 +1,4 @@
 <a id="readme-top"></a>
----
 
 <div align="center">
   <img src="https://share.ber.sh/sinkzone-splash.png" alt="Sinkzone: DNS-based Productivity Tool" width="600">
@@ -30,7 +29,7 @@
 <summary><b>📚 Table of Contents</b></summary>
 
 
-- [](#)
+
 - [What is Sinkzone?](#what-is-sinkzone)
 - [Motivation](#motivation)
 - [Key Features](#key-features)
@@ -101,7 +100,7 @@ Now I can code for hours uninterrupted. Even my son uses Sinkzone during chess p
 ### Installation by Platform
 
 <details>
-<summary><b>🍎 macOS Installation</b></summary>
+<summary><b>👉 macOS Installation</b></summary>
 
 **Homebrew (Recommended):**
 ```bash
@@ -142,7 +141,7 @@ sudo mv sinkzone /usr/local/bin/
 </details>
 
 <details>
-<summary><b>🐧 Linux Installation</b></summary>
+<summary><b>👉 Linux Installation</b></summary>
 
 ```bash
 # AMD64
@@ -176,7 +175,7 @@ echo "nameserver 127.0.0.1" | sudo tee /etc/resolv.conf
 </details>
 
 <details>
-<summary><b>🪟 Windows Installation</b></summary>
+<summary><b>👉 Windows Installation</b></summary>
 
 **Direct Download:**
 ```powershell
@@ -216,7 +215,7 @@ sinkzone focus start
 </details>
 
 <details>
-<summary><b>🔨 Build from Source</b></summary>
+<summary><b>👉 Build from Source</b></summary>
 
 ```bash
 # Clone and build
