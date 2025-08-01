@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/berbyte/sinkzone/internal/socket"
+	"github.com/berbyte/sinkzone/internal/api"
 	"github.com/spf13/cobra"
 )
 
@@ -12,6 +12,7 @@ var (
 	focusEnable   bool
 	focusDisable  bool
 	focusDuration string
+	focusAPIURL   string
 )
 
 var focusCmd = &cobra.Command{
@@ -58,20 +59,20 @@ func init() {
 	focusCmd.Flags().BoolVar(&focusEnable, "enable", false, "Enable focus mode")
 	focusCmd.Flags().BoolVar(&focusDisable, "disable", false, "Disable focus mode")
 	focusCmd.Flags().StringVar(&focusDuration, "duration", "", "Duration for focus mode (e.g., '1h', '30m')")
+	focusCmd.Flags().StringVar(&focusAPIURL, "api-url", "http://localhost:8080", "URL of the resolver API")
 }
 
 func enableFocusMode(duration time.Duration) error {
-	// Create socket client
-	client := socket.NewClient()
+	// Create API client
+	client := api.NewClient(focusAPIURL)
 
-	// Try to connect to socket
-	if err := client.Connect(); err != nil {
-		return fmt.Errorf("failed to connect to resolver socket: %w\nMake sure the resolver is running with 'sudo sinkzone resolver'", err)
+	// Try to connect to API
+	if err := client.HealthCheck(); err != nil {
+		return fmt.Errorf("failed to connect to resolver API: %w\nMake sure the resolver is running with 'sudo sinkzone resolver'", err)
 	}
-	defer client.Disconnect()
 
-	// Set focus mode via socket
-	if err := client.SetFocusMode(true, duration); err != nil {
+	// Set focus mode via API
+	if err := client.SetFocusMode(true, duration.String()); err != nil {
 		return fmt.Errorf("failed to enable focus mode: %w", err)
 	}
 
@@ -82,17 +83,16 @@ func enableFocusMode(duration time.Duration) error {
 }
 
 func disableFocusMode() error {
-	// Create socket client
-	client := socket.NewClient()
+	// Create API client
+	client := api.NewClient(focusAPIURL)
 
-	// Try to connect to socket
-	if err := client.Connect(); err != nil {
-		return fmt.Errorf("failed to connect to resolver socket: %w\nMake sure the resolver is running with 'sudo sinkzone resolver'", err)
+	// Try to connect to API
+	if err := client.HealthCheck(); err != nil {
+		return fmt.Errorf("failed to connect to resolver API: %w\nMake sure the resolver is running with 'sudo sinkzone resolver'", err)
 	}
-	defer client.Disconnect()
 
-	// Set focus mode via socket
-	if err := client.SetFocusMode(false, 0); err != nil {
+	// Set focus mode via API
+	if err := client.SetFocusMode(false, ""); err != nil {
 		return fmt.Errorf("failed to disable focus mode: %w", err)
 	}
 

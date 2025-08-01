@@ -17,13 +17,14 @@ func Load() (*Config, error) {
 	configPath := getConfigPath()
 
 	// Create config directory if it doesn't exist
-	if err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(configPath), 0750); err != nil {
 		return nil, fmt.Errorf("failed to create config directory: %w", err)
 	}
 
 	// Load existing config or create default
 	cfg := &Config{}
 	if _, err := os.Stat(configPath); err == nil {
+		// #nosec G304 -- configPath is a hardcoded path from user home directory
 		data, err := os.ReadFile(configPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read config file: %w", err)
@@ -54,7 +55,7 @@ func Save(cfg *Config) error {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	if err := os.WriteFile(configPath, data, 0644); err != nil {
+	if err := os.WriteFile(configPath, data, 0600); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
 

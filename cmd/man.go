@@ -29,7 +29,9 @@ var manCmd = &cobra.Command{
 		}
 
 		// First try to use the system's man command
+		// Note: manPagePath is a hardcoded path, so this is safe from command injection
 		if manPath, err := exec.LookPath("man"); err == nil {
+			// #nosec G204 -- manPagePath is a hardcoded path, safe from command injection
 			cmd := exec.Command(manPath, manPagePath)
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr

@@ -299,10 +299,22 @@ sinkzone man
 
 ### Architecture
 
-Sinkzone is composed of two parts:
+Sinkzone is composed of three parts:
 
-* **Resolver**: A local DNS server that intercepts queries and maintains real-time data via Unix socket.
-* **TUI**: A terminal UI for interacting with and monitoring the system via socket communication.
+* **Resolver**: A local DNS server that intercepts queries and maintains real-time data via HTTP API.
+* **HTTP API Server**: Provides REST endpoints for monitoring DNS queries and controlling focus mode.
+* **TUI/CLI**: User interfaces that communicate with the resolver via HTTP API.
+* **TUI**: A terminal UI for interacting with and monitoring the system via HTTP API.
+
+### API Endpoints
+
+The resolver exposes the following HTTP endpoints:
+
+- `GET /api/queries` - Get the last 100 DNS queries
+- `GET /api/focus` - Get current focus mode state
+- `POST /api/focus` - Set focus mode (enabled/disabled, duration)
+- `GET /api/state` - Get complete resolver state
+- `GET /health` - Health check endpoint
 
 ### Normal Mode
 

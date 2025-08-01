@@ -2,11 +2,12 @@ package cmd
 
 import (
 	"fmt"
-	"time"
 
-	"github.com/berbyte/sinkzone/internal/socket"
+	"github.com/berbyte/sinkzone/internal/api"
 	"github.com/spf13/cobra"
 )
+
+var apiURL string
 
 var monitorCmd = &cobra.Command{
 	Use:   "monitor",
@@ -17,21 +18,20 @@ Use this to observe which domains your system is accessing in real time. It's es
 
 Make sure the resolver is running before using this command.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Create socket client
-		client := socket.NewClient()
+		// Create API client
+		client := api.NewClient(apiURL)
 
-		// Try to connect to socket
-		if err := client.Connect(); err != nil {
-			return fmt.Errorf("failed to connect to resolver socket: %w\nMake sure the resolver is running with 'sudo sinkzone resolver'", err)
+		// Try to connect to API
+		if err := client.HealthCheck(); err != nil {
+			return fmt.Errorf("failed to connect to resolver API: %w\nMake sure the resolver is running with 'sudo sinkzone resolver'", err)
 		}
 		fmt.Printf("Connected successfully!\n")
-		defer client.Disconnect()
-
-		// Wait a moment for data to be received
-		time.Sleep(100 * time.Millisecond)
 
 		// Get recent queries
-		queries := client.GetQueries()
+		queries, err := client.GetQueries()
+		if err != nil {
+			return fmt.Errorf("failed to get queries: %w", err)
+		}
 
 		if len(queries) == 0 {
 			fmt.Println("No DNS queries recorded yet.")
@@ -47,7 +47,7 @@ Make sure the resolver is running before using this command.`,
 
 		fmt.Printf("Last %d DNS requests:\n\n", len(queries[start:]))
 		fmt.Printf("%-40s %-10s %-20s %s\n", "Domain", "Status", "Time", "Blocked")
-		fmt.Println(string(make([]byte, 80, 80)))
+		fmt.Println(string(make([]byte, 80)))
 
 		for _, query := range queries[start:] {
 			status := "ALLOWED"
@@ -73,4 +73,9 @@ Make sure the resolver is running before using this command.`,
 		fmt.Printf("\nTotal queries: %d\n", len(queries))
 		return nil
 	},
+}
+
+func init() {
+	monitorCmd.Flags().StringVarP(&apiURL, "api-url", "u", "http://localhost:8080", "URL of the resolver API")
+	rootCmd.AddCommand(monitorCmd)
 }

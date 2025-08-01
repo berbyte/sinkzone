@@ -76,4 +76,3 @@ docker_manifests:
     image_templates:
       - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:latest-amd64"
       - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:latest-arm64"
-

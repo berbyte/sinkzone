@@ -6,10 +6,12 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/berbyte/sinkzone/internal/api"
 	"github.com/berbyte/sinkzone/internal/config"
-	"github.com/berbyte/sinkzone/internal/socket"
 	"github.com/spf13/cobra"
 )
+
+var statusAPIURL string
 
 var statusCmd = &cobra.Command{
 	Use:   "status [type]",
@@ -35,6 +37,11 @@ Use this to get a quick overview of what Sinkzone is doing.`,
 			return fmt.Errorf("unknown status type: %s. Use 'resolver' or 'focus'", args[0])
 		}
 	},
+}
+
+func init() {
+	statusCmd.Flags().StringVar(&statusAPIURL, "api-url", "http://localhost:8080", "URL of the resolver API")
+	rootCmd.AddCommand(statusCmd)
 }
 
 func showGeneralStatus() error {
@@ -68,6 +75,7 @@ func showResolverStatus() error {
 		return nil
 	}
 
+	// #nosec G304 -- pidFile is a hardcoded path from user home directory
 	pidData, err := os.ReadFile(pidFile)
 	if err != nil {
 		fmt.Println("Resolver: UNKNOWN (cannot read PID file)")
@@ -79,23 +87,24 @@ func showResolverStatus() error {
 }
 
 func showFocusStatus() error {
-	// Try to get focus mode state from socket first
-	client := socket.NewClient()
-	if err := client.Connect(); err == nil {
-		defer client.Disconnect()
+	// Try to get focus mode state from API first
+	client := api.NewClient(statusAPIURL)
+	if err := client.HealthCheck(); err == nil {
+		focusState, err := client.GetFocusMode()
+		if err != nil {
+			return fmt.Errorf("failed to get focus mode state: %w", err)
+		}
 
-		focusMode, endTime := client.GetFocusModeState()
-
-		if focusMode {
-			if endTime != nil {
-				remaining := time.Until(*endTime)
+		if focusState.Enabled {
+			if focusState.EndTime != nil {
+				remaining := time.Until(*focusState.EndTime)
 				if remaining > 0 {
 					fmt.Printf("Focus mode: ENABLED\n")
 					fmt.Printf("Remaining time: %s\n", remaining.Round(time.Minute))
-					fmt.Printf("Ends at: %s\n", endTime.Format("15:04:05"))
+					fmt.Printf("Ends at: %s\n", focusState.EndTime.Format("15:04:05"))
 				} else {
 					fmt.Printf("Focus mode: EXPIRED\n")
-					fmt.Printf("Ended at: %s\n", endTime.Format("15:04:05"))
+					fmt.Printf("Ended at: %s\n", focusState.EndTime.Format("15:04:05"))
 				}
 			} else {
 				fmt.Printf("Focus mode: ENABLED (no expiration)\n")
@@ -108,7 +117,7 @@ func showFocusStatus() error {
 		return nil
 	}
 
-	// Fallback to state manager if socket is not available
+	// Fallback to state manager if API is not available
 	stateMgr, err := config.NewStateManager()
 	if err != nil {
 		return fmt.Errorf("failed to initialize state manager: %w", err)

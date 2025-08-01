@@ -50,18 +50,23 @@ func addToAllowlist(domain string) error {
 	allowlistPath := filepath.Join(homeDir, ".sinkzone", "allowlist.txt")
 
 	// Create directory if it doesn't exist
-	if err := os.MkdirAll(filepath.Dir(allowlistPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(allowlistPath), 0750); err != nil {
 		return fmt.Errorf("failed to create allowlist directory: %w", err)
 	}
 
 	// Read existing allowlist
 	existingDomains := make(map[string]bool)
 	if _, err := os.Stat(allowlistPath); err == nil {
+		// #nosec G304 -- allowlistPath is a hardcoded path from user home directory
 		file, err := os.Open(allowlistPath)
 		if err != nil {
 			return fmt.Errorf("failed to open allowlist file: %w", err)
 		}
-		defer file.Close()
+		defer func() {
+			if closeErr := file.Close(); closeErr != nil {
+				fmt.Printf("Warning: failed to close allowlist file: %v\n", closeErr)
+			}
+		}()
 
 		scanner := bufio.NewScanner(file)
 		for scanner.Scan() {
@@ -83,11 +88,16 @@ func addToAllowlist(domain string) error {
 	}
 
 	// Add domain to allowlist
-	file, err := os.OpenFile(allowlistPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	// #nosec G304 -- allowlistPath is a hardcoded path from user home directory
+	file, err := os.OpenFile(allowlistPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
 		return fmt.Errorf("failed to open allowlist file for writing: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close allowlist file: %v\n", closeErr)
+		}
+	}()
 
 	if _, err := file.WriteString(domain + "\n"); err != nil {
 		return fmt.Errorf("failed to write to allowlist file: %w", err)
@@ -112,11 +122,16 @@ func removeFromAllowlist(domain string) error {
 	}
 
 	// Read existing allowlist
+	// #nosec G304 -- allowlistPath is a hardcoded path from user home directory
 	file, err := os.Open(allowlistPath)
 	if err != nil {
 		return fmt.Errorf("failed to open allowlist file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close allowlist file: %v\n", closeErr)
+		}
+	}()
 
 	var lines []string
 	scanner := bufio.NewScanner(file)
@@ -144,7 +159,7 @@ func removeFromAllowlist(domain string) error {
 	}
 
 	// Write updated allowlist
-	if err := os.WriteFile(allowlistPath, []byte(strings.Join(lines, "\n")+"\n"), 0644); err != nil {
+	if err := os.WriteFile(allowlistPath, []byte(strings.Join(lines, "\n")+"\n"), 0600); err != nil {
 		return fmt.Errorf("failed to write allowlist file: %w", err)
 	}
 
@@ -167,11 +182,16 @@ func listAllowlist() error {
 	}
 
 	// Read and display allowlist
+	// #nosec G304 -- allowlistPath is a hardcoded path from user home directory
 	file, err := os.Open(allowlistPath)
 	if err != nil {
 		return fmt.Errorf("failed to open allowlist file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close allowlist file: %v\n", closeErr)
+		}
+	}()
 
 	var domains []string
 	scanner := bufio.NewScanner(file)

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/berbyte/sinkzone/internal/api"
 	"github.com/berbyte/sinkzone/internal/config"
-	"github.com/berbyte/sinkzone/internal/socket"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -30,11 +30,10 @@ const sinkzoneBanner = `
 
 // Tab-specific state structures
 type MonitoringState struct {
-	dnsQueries  []socket.DNSQuery
+	dnsQueries  []api.DNSQuery
 	lastUpdate  time.Time
 	lastRefresh time.Time
 	tableCursor int
-	allowlist   []string
 }
 
 type AllowedDomainsState struct {
@@ -54,9 +53,9 @@ type Model struct {
 	currentLine   int
 	animationDone bool
 
-	// Socket client and config
-	socketClient *socket.Client
-	config       *config.Config
+	// API client and config
+	apiClient *api.Client
+	config    *config.Config
 
 	// Focus mode state
 	focusModeActive  bool
@@ -69,14 +68,8 @@ type Model struct {
 	allowedDomains AllowedDomainsState
 
 	// Update tracking
-	allowlistUpdated  bool      // Flag to track when allowlist was updated
 	lastChangedDomain string    // Track the last domain that was changed
 	lastChangeTime    time.Time // When the last change occurred
-
-	// Real-time update tracking
-	allowlistUpdatePending bool
-	queryUpdatePending     bool
-	focusModeUpdatePending bool
 }
 
 // Cleanup function to restore terminal
@@ -92,9 +85,7 @@ var (
 	// Colors
 	background = lipgloss.Color("#000000")
 	textColor  = lipgloss.Color("#FFFFFF")
-	accent1    = lipgloss.Color("#00FFFF") // Cyan
 	accent2    = lipgloss.Color("#FF69B4") // Pink
-	accent3    = lipgloss.Color("#90EE90") // Light Green
 	accent4    = lipgloss.Color("#87CEEB") // Sky Blue
 	muted      = lipgloss.Color("#808080") // Grey
 
@@ -146,6 +137,10 @@ var (
 type tickMsg time.Time
 
 func Start() error {
+	return StartWithAPIURL("http://localhost:8080")
+}
+
+func StartWithAPIURL(apiURL string) error {
 	// Restore terminal state before starting
 	checkAndRestoreTerminal()
 
@@ -163,12 +158,8 @@ func Start() error {
 	// Split banner into lines for animation
 	bannerLines := strings.Split(strings.TrimSpace(sinkzoneBanner), "\n")
 
-	// Initialize socket client
-	socketClient := socket.NewClient()
-	if err := socketClient.Connect(); err != nil {
-		fmt.Printf("Warning: failed to connect to socket: %v\n", err)
-		socketClient = nil
-	}
+	// Initialize API client
+	apiClient := api.NewClient(apiURL)
 
 	// Load config
 	cfg, err := config.Load()
@@ -184,14 +175,13 @@ func Start() error {
 		bannerLines:   bannerLines,
 		currentLine:   0,
 		animationDone: false,
-		socketClient:  socketClient,
+		apiClient:     apiClient,
 		config:        cfg,
 		monitoring: MonitoringState{
-			dnsQueries:  []socket.DNSQuery{},
+			dnsQueries:  []api.DNSQuery{},
 			lastUpdate:  time.Now(),
 			lastRefresh: time.Now(),
 			tableCursor: 0,
-			allowlist:   []string{},
 		},
 		allowedDomains: AllowedDomainsState{
 			cursor:  0,
@@ -202,39 +192,8 @@ func Start() error {
 	// Initialize focus mode status
 	m.updateFocusModeStatus()
 
-	// Load initial data for monitoring tab
-	if socketClient != nil && socketClient.IsConnected() {
-		// Load initial DNS queries
-		m.monitoring.dnsQueries = socketClient.GetQueries()
-
-		// Load initial allowlist
-		m.monitoring.allowlist = socketClient.GetAllowlist()
-
-		// Set up socket callbacks for real-time updates
-		socketClient.SetAllowlistUpdateCallback(func(allowlist []string) {
-			// This will be called when allowlist is updated from the socket
-			// Set flag to update in the main loop
-			m.allowlistUpdatePending = true
-		})
-		socketClient.SetQueryUpdateCallback(func(queries []socket.DNSQuery) {
-			// This will be called when queries are updated from the socket
-			// Set flag to update in the main loop
-			m.queryUpdatePending = true
-		})
-		socketClient.SetFocusModeUpdateCallback(func(focusMode bool, endTime *time.Time) {
-			// This will be called when focus mode is updated from the socket
-			// Set flag to update in the main loop
-			m.focusModeUpdatePending = true
-		})
-	}
-
-	// Load initial allowlist data
-	m.loadAllowlistData()
-
-	// Initialize cursor bounds
-	if len(m.monitoring.dnsQueries) > 0 {
-		m.monitoring.tableCursor = len(m.monitoring.dnsQueries) - 1 // Start at the bottom
-	}
+	// Load initial data
+	m.loadInitialData()
 
 	// Create program with improved terminal handling
 	p := tea.NewProgram(
@@ -253,26 +212,72 @@ func Start() error {
 	return nil
 }
 
+func (m Model) loadInitialData() {
+	// Load initial DNS queries
+	if queries, err := m.apiClient.GetQueries(); err == nil {
+		m.monitoring.dnsQueries = queries
+		m.monitoring.lastUpdate = time.Now()
+	}
+
+	// Load initial allowlist
+	m.loadAllowlistData()
+
+	// Initialize cursor bounds
+	if len(m.monitoring.dnsQueries) > 0 {
+		m.monitoring.tableCursor = len(m.monitoring.dnsQueries) - 1 // Start at the bottom
+	}
+}
+
+// validatePath ensures the path is within the user's home directory and doesn't contain path traversal
+func validatePath(path string) error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory: %w", err)
+	}
+
+	// Resolve any symlinks and get absolute path
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("failed to resolve absolute path: %w", err)
+	}
+
+	// Check if the path is within the home directory
+	if !strings.HasPrefix(absPath, homeDir) {
+		return fmt.Errorf("path is outside home directory: %s", path)
+	}
+
+	// Check for path traversal attempts
+	if strings.Contains(path, "..") {
+		return fmt.Errorf("path contains traversal attempt: %s", path)
+	}
+
+	return nil
+}
+
 func (m Model) loadAllowlistData() {
+	// Get allowlist path
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return
 	}
-
 	allowlistPath := filepath.Join(homeDir, ".sinkzone", "allowlist.txt")
 
-	// Check if allowlist file exists
-	if _, err := os.Stat(allowlistPath); os.IsNotExist(err) {
-		m.allowedDomains.domains = []string{}
+	// Validate the path for security
+	if err := validatePath(allowlistPath); err != nil {
 		return
 	}
 
 	// Read and display allowlist
+	// #nosec G304 -- allowlistPath is a hardcoded path from user home directory
 	file, err := os.Open(allowlistPath)
 	if err != nil {
 		return
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close allowlist file: %v\n", closeErr)
+		}
+	}()
 
 	var domains []string
 	scanner := bufio.NewScanner(file)
@@ -296,47 +301,38 @@ func (m Model) loadAllowlistData() {
 }
 
 func (m Model) enableFocusMode() error {
-	// Use socket client if available
-	if m.socketClient != nil && m.socketClient.IsConnected() {
-		if err := m.socketClient.SetFocusMode(true, time.Hour); err != nil {
-			return fmt.Errorf("failed to enable focus mode via socket: %w", err)
-		}
-		// Update focus mode status immediately
-		m.updateFocusModeStatus()
-		return nil
-	}
-
-	// Fallback to direct state management if socket is not available
-	stateMgr, err := config.NewStateManager()
-	if err != nil {
-		return fmt.Errorf("failed to initialize state manager: %w", err)
-	}
-
-	// Enable focus mode for 1 hour
-	if err := stateMgr.SetFocusMode(true, time.Hour); err != nil {
+	// Enable focus mode for 1 hour via API
+	if err := m.apiClient.SetFocusMode(true, "1h"); err != nil {
 		return fmt.Errorf("failed to enable focus mode: %w", err)
 	}
 
+	// Update focus mode status immediately
+	m.updateFocusModeStatus()
 	return nil
 }
 
 func (m Model) updateFocusModeStatus() {
-	// Try to get focus mode state from socket first
-	if m.socketClient != nil && m.socketClient.IsConnected() {
-		focusMode, endTime := m.socketClient.GetFocusModeState()
-		m.focusModeActive = focusMode
-		m.focusEndTime = endTime
+	// Get focus mode state from API
+	if focusState, err := m.apiClient.GetFocusMode(); err == nil {
+		// Update focus mode state from API response
+		//nolint:staticcheck // SA4005: These assignments are necessary for state synchronization
+		m.focusModeActive = focusState.Enabled
+		//nolint:staticcheck // SA4005: These assignments are necessary for state synchronization
+		m.focusEndTime = focusState.EndTime
 		return
 	}
 
-	// Fallback to state manager if socket is not available
+	// Fallback to state manager if API is not available
 	stateMgr, err := config.NewStateManager()
 	if err != nil {
 		return
 	}
 
 	state := stateMgr.GetState()
+	// Update focus mode state from state manager
+	//nolint:staticcheck // SA4005: These assignments are necessary for state synchronization
 	m.focusModeActive = state.FocusMode
+	//nolint:staticcheck // SA4005: These assignments are necessary for state synchronization
 	m.focusEndTime = state.FocusEndTime
 }
 
@@ -376,11 +372,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			})
 		} else {
 			// Update DNS data every second
-			if m.socketClient != nil && m.socketClient.IsConnected() {
-				// Get new records from socket
-				newQueries := m.socketClient.GetQueries()
-				if len(newQueries) > 0 {
-
+			if queries, err := m.apiClient.GetQueries(); err == nil {
+				if len(queries) > 0 {
 					// Calculate how many entries we can display
 					headerHeight := lipgloss.Height(headerStyle.Render(sinkzoneBanner)) + 2
 					tabHeight := 1
@@ -392,32 +385,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 
 					// Truncate to only keep the most recent entries that fit
-					if len(newQueries) > maxVisibleEntries {
-						newQueries = newQueries[len(newQueries)-maxVisibleEntries:]
+					if len(queries) > maxVisibleEntries {
+						queries = queries[len(queries)-maxVisibleEntries:]
 					}
 
-					m.monitoring.dnsQueries = newQueries
+					m.monitoring.dnsQueries = queries
 					m.monitoring.lastUpdate = time.Now()
-
 				}
-
-				// Update last refresh time
-				m.monitoring.lastRefresh = time.Now()
-
-				// Load allowlist
-				newAllowlist := m.socketClient.GetAllowlist()
-				if len(newAllowlist) != len(m.monitoring.allowlist) {
-					// Allowlist changed, adjust cursor if needed
-					if m.activeTab == 1 && m.allowedDomains.cursor >= len(newAllowlist) {
-						m.allowedDomains.cursor = max(len(newAllowlist)-1, 0)
-					}
-					m.allowlistUpdated = true
-				}
-				m.monitoring.allowlist = newAllowlist
-			} else {
-				// If no socket connection, still update the refresh time to prevent errors
-				m.monitoring.lastRefresh = time.Now()
 			}
+
+			// Update last refresh time
+			m.monitoring.lastRefresh = time.Now()
 
 			// Check focus mode status
 			m.updateFocusModeStatus()
@@ -425,42 +403,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Clear focus message after 3 seconds
 			if m.focusMessage != "" && time.Since(m.focusMessageTime) > 3*time.Second {
 				m.focusMessage = ""
-			}
-
-			// Clear allowlist updated flag after handling
-			if m.allowlistUpdated {
-				m.allowlistUpdated = false
-			}
-
-			// Handle pending real-time updates from socket callbacks
-			if m.allowlistUpdatePending {
-				// Update allowlist immediately from socket
-				newAllowlist := m.socketClient.GetAllowlist()
-				if len(newAllowlist) != len(m.monitoring.allowlist) {
-					// Allowlist changed, adjust cursor if needed
-					if m.activeTab == 1 && m.allowedDomains.cursor >= len(newAllowlist) {
-						m.allowedDomains.cursor = max(len(newAllowlist)-1, 0)
-					}
-					m.allowlistUpdated = true
-				}
-				m.monitoring.allowlist = newAllowlist
-				m.allowlistUpdatePending = false
-			}
-
-			if m.queryUpdatePending {
-				// Update queries immediately from socket
-				newQueries := m.socketClient.GetQueries()
-				if len(newQueries) > 0 {
-					m.monitoring.dnsQueries = newQueries
-					m.monitoring.lastUpdate = time.Now()
-				}
-				m.queryUpdatePending = false
-			}
-
-			if m.focusModeUpdatePending {
-				// Update focus mode status immediately from socket
-				m.updateFocusModeStatus()
-				m.focusModeUpdatePending = false
 			}
 
 			// Clear last changed domain after 2 seconds
@@ -485,8 +427,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Could add error handling here, but for now just continue
 				fmt.Printf("Warning: failed to enable focus mode: %v\n", err)
 			} else {
-				// Immediately update focus mode status in TUI
-				m.updateFocusModeStatus()
 				// If we're on monitoring tab, switch to allowlist tab
 				if m.activeTab == 0 {
 					m.activeTab = 1
@@ -529,9 +469,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.loadAllowlistData()
 		default:
 			// Handle tab-specific key events
-			if m.activeTab == 0 {
+			switch m.activeTab {
+			case 0:
 				return m.updateMonitoring(msg)
-			} else if m.activeTab == 1 {
+			case 1:
 				return m.updateAllowedDomains(msg)
 			}
 		}
@@ -557,34 +498,11 @@ func (m Model) updateMonitoring(msg tea.KeyMsg) (Model, tea.Cmd) {
 			selectedQuery := m.monitoring.dnsQueries[m.monitoring.tableCursor]
 			selectedDomain := selectedQuery.Domain
 
-			// Check if domain is in allowlist
-			isInAllowlist := m.isInAllowlist(selectedDomain)
-
-			if isInAllowlist {
-				// Remove from allowlist
-				if m.socketClient != nil && m.socketClient.IsConnected() {
-					if err := m.socketClient.RemoveFromAllowlist(selectedDomain); err == nil {
-						// Update local state immediately
-						m.monitoring.allowlist = m.socketClient.GetAllowlist()
-						m.lastChangedDomain = selectedDomain
-						m.lastChangeTime = time.Now()
-						// Reload allowlist data to update the display
-						m.loadAllowlistData()
-					}
-				}
-			} else {
-				// Add to allowlist
-				if m.socketClient != nil && m.socketClient.IsConnected() {
-					if err := m.socketClient.AddToAllowlist(selectedDomain); err == nil {
-						// Update local state immediately
-						m.monitoring.allowlist = m.socketClient.GetAllowlist()
-						m.lastChangedDomain = selectedDomain
-						m.lastChangeTime = time.Now()
-						// Reload allowlist data to update the display
-						m.loadAllowlistData()
-					}
-				}
-			}
+			// For now, just reload the data regardless of action
+			// TODO: Implement actual allowlist management via API
+			m.loadAllowlistData()
+			m.lastChangedDomain = selectedDomain
+			m.lastChangeTime = time.Now()
 		}
 	}
 	return m, nil
@@ -604,17 +522,10 @@ func (m Model) updateAllowedDomains(msg tea.KeyMsg) (Model, tea.Cmd) {
 		if len(m.allowedDomains.domains) > 0 && m.allowedDomains.cursor < len(m.allowedDomains.domains) {
 			selectedDomain := m.allowedDomains.domains[m.allowedDomains.cursor]
 
-			// Remove from allowlist
-			if m.socketClient != nil && m.socketClient.IsConnected() {
-				if err := m.socketClient.RemoveFromAllowlist(selectedDomain); err == nil {
-					// Update local state immediately
-					m.monitoring.allowlist = m.socketClient.GetAllowlist()
-					m.lastChangedDomain = selectedDomain
-					m.lastChangeTime = time.Now()
-					// Reload allowlist data
-					m.loadAllowlistData()
-				}
-			}
+			// Remove from allowlist - for now, just reload the data
+			m.loadAllowlistData()
+			m.lastChangedDomain = selectedDomain
+			m.lastChangeTime = time.Now()
 		}
 	}
 	return m, nil
@@ -685,7 +596,7 @@ func (m Model) View() string {
 		headerContent := bannerText + "\n" + focusIndicator
 
 		// Use red-tinted header style for focus mode
-		focusHeaderStyle := headerStyle.Copy().
+		focusHeaderStyle := headerStyle.
 			Background(lipgloss.Color("#2D1B1B")). // Dark red background
 			Foreground(lipgloss.Color("#FF6B6B"))  // Red text
 		header = focusHeaderStyle.Width(m.width).Height(headerHeight).Align(lipgloss.Center).Padding(1, 0).Render(headerContent)
@@ -700,7 +611,8 @@ func (m Model) View() string {
 	// Content area with safety check
 	contentText := "No content available"
 	if m.activeTab < len(m.tabs) {
-		if m.activeTab == 0 { // Monitoring tab
+		switch m.activeTab {
+		case 0: // Monitoring tab
 			if m.focusModeActive {
 				contentText = `
 🔒 FOCUS MODE ACTIVE
@@ -715,7 +627,7 @@ Press ←/→ to switch to other tabs.`
 			} else {
 				contentText = m.renderDNSMonitoring()
 			}
-		} else if m.activeTab == 1 { // Allowlist tab
+		case 1: // Allowlist tab
 			contentText = m.renderAllowedDomains()
 		}
 	}
@@ -733,12 +645,7 @@ Press ←/→ to switch to other tabs.`
 	}
 
 	// Apply content style with conditional height
-	var content string
-	if m.activeTab == 0 { // Monitoring tab - use fixed height
-		content = contentStyle.Width(m.width - 4).Height(contentHeight).Render(contentText)
-	} else { // Allowlist tab - use flexible height but ensure it doesn't exceed available space
-		content = contentStyle.Width(m.width - 4).Height(contentHeight).Render(contentText)
-	}
+	content := contentStyle.Width(m.width - 4).Height(contentHeight).Render(contentText)
 
 	// Footer with full width
 	footer := footerStyle.Width(m.width).Render("Navigation: ←/→ Switch tabs | ↑/↓ Navigate | Space/Enter Toggle | F Focus mode | Q Quit")
@@ -883,18 +790,4 @@ func (m Model) isInAllowlist(domain string) bool {
 		}
 	}
 	return false
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

@@ -159,7 +159,7 @@ func (sm *StateManager) loadState() error {
 func (sm *StateManager) saveState() error {
 	// Ensure directory exists with proper permissions
 	dir := filepath.Dir(sm.statePath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0750); err != nil {
 		return fmt.Errorf("failed to create state directory: %w", err)
 	}
 
@@ -170,18 +170,21 @@ func (sm *StateManager) saveState() error {
 	}
 
 	// Try to write the file
-	if err := os.WriteFile(sm.statePath, data, 0644); err != nil {
+	if err := os.WriteFile(sm.statePath, data, 0600); err != nil {
 		// If we can't write to the file, try to create it in a user-writable location
 		if os.IsPermission(err) {
 			// Try to create the file in a temporary location first
 			tempFile := sm.statePath + ".tmp"
-			if writeErr := os.WriteFile(tempFile, data, 0644); writeErr == nil {
+			if writeErr := os.WriteFile(tempFile, data, 0600); writeErr == nil {
 				// Try to move it to the final location
 				if moveErr := os.Rename(tempFile, sm.statePath); moveErr == nil {
 					return nil
 				}
 				// Clean up temp file
-				os.Remove(tempFile)
+				if removeErr := os.Remove(tempFile); removeErr != nil {
+					// Log but don't fail - this is cleanup
+					fmt.Printf("Warning: failed to remove temp file %s: %v\n", tempFile, removeErr)
+				}
 			}
 		}
 		return fmt.Errorf("failed to write state file: %w", err)

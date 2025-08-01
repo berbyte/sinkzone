@@ -66,7 +66,9 @@ func (c *Client) Connect() error {
 
 func (c *Client) Disconnect() {
 	if c.conn != nil {
-		c.conn.Close()
+		if err := c.conn.Close(); err != nil {
+			fmt.Printf("Warning: failed to close socket connection: %v\n", err)
+		}
 		c.conn = nil
 	}
 	c.connected = false
