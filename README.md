@@ -7,6 +7,8 @@
     Sinkzone is a local DNS forwarder that blocks all domains unless explicitly allowlisted.  
     It helps you focus, stay safe, and shrink the internet down to just what you need.
     <br /><br />
+    <img src="examples/demo-tui.gif" alt="Sinkzone Demo" />
+    <br /><br />
     <a href="#what-is-sinkzone"><strong>Learn More »</strong></a>
     &middot;
     <a href="#quick-start">Quick Start</a>
