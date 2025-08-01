@@ -105,7 +105,7 @@ Now I can code for hours uninterrupted. Even my son uses Sinkzone during chess p
 **Homebrew (Recommended):**
 ```bash
 brew tap berbyte/ber
-brew install berbyte/ber/sinkzone
+brew install sinkzone
 ```
 
 **Manual Setup:**
