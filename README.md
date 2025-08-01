@@ -4,7 +4,7 @@
   <img src="https://share.ber.sh/sinkzone-splash.png" alt="Sinkzone: DNS-based Productivity Tool" width="600">
   <h1 align="center">Sinkzone: Block-by-default DNS tool for focus and control</h1>
   <p align="center">
-    Sinkzone is a local DNS forwarder that blocks all domains unless explicitly allowlisted.  
+    Sinkzone is a local DNS forwarder that blocks all domains unless explicitly allowlisted.<br />
     It helps you focus, stay safe, and shrink the internet down to just what you need.
     <br /><br />
     <img src="examples/demo-tui.gif" alt="Sinkzone Demo" />
