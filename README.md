@@ -80,10 +80,6 @@ Now I can code for hours uninterrupted. Even my son uses Sinkzone during chess p
 
 **Sinkzone exists because I needed it. Maybe you do too.**
 
-![Sinkzone TUI](examples/tui-screenshot.png)
-
-*The Sinkzone Terminal User Interface showing real-time DNS monitoring and allowlist management*
-
 ---
 
 ## Key Features
