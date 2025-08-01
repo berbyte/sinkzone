@@ -2,10 +2,12 @@
 
 <div align="center">
   <img src="https://share.ber.sh/sinkzone-splash.png" alt="Sinkzone: DNS-based Productivity Tool" width="600">
-  <h1 align="center">Sinkzone: Block-by-default DNS tool for focus and control</h1>
+  <h1 align="center">Sinkzone: Block-by-default DNS tool for deep focus</h1>
   <p align="center">
-    Sinkzone is a local DNS forwarder that blocks all domains unless explicitly allowlisted.<br />
-    It helps you focus, stay safe, and shrink the internet down to just what you need.
+      The internet is infinite. Your focus isn’t. <br />
+      <br />
+      Sinkzone helps you reclaim control by flipping the default: **everything is blocked**, unless you explicitly allow it. No feeds. No pings.<br/>
+      No surprise connections. Just a quiet, intentional internet.
     <br /><br />
     <img src="examples/demo-tui.gif" alt="Sinkzone Demo" />
     <br /><br />
@@ -35,6 +37,7 @@
 
 - [What is Sinkzone?](#what-is-sinkzone)
 - [Motivation](#motivation)
+  - [Why use Sinkzone?](#why-use-sinkzone)
 - [Key Features](#key-features)
 - [Quick Start](#quick-start)
   - [Installation by Platform](#installation-by-platform)
@@ -79,6 +82,16 @@ Sinkzone was born from that insight. I was tired of coding sessions interrupted 
 Now I can code for hours uninterrupted. Even my son uses Sinkzone during chess practice to stay focused.
 
 **Sinkzone exists because I needed it. Maybe you do too.**
+
+
+---
+
+### Why use Sinkzone?
+
+- Avoid distraction without browser extensions or hacks
+- Run locally on macOS or Linux — no cloud, no telemetry
+- Perfect for deep work sessions, writing, coding, or child safety
+- Terminal UI included — toggle modes, view logs, edit allowlist
 
 ---
 
