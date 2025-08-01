@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -67,6 +68,19 @@ func getConfigPath() string {
 	if err != nil {
 		homeDir = "."
 	}
+
+	// Use different paths for Windows vs Unix-like systems
+	if runtime.GOOS == "windows" {
+		// On Windows, use AppData for better compatibility
+		appData := os.Getenv("APPDATA")
+		if appData != "" {
+			return filepath.Join(appData, "sinkzone", "sinkzone.yaml")
+		}
+		// Fallback to user home directory
+		return filepath.Join(homeDir, "sinkzone", "sinkzone.yaml")
+	}
+
+	// Unix-like systems use ~/.sinkzone/
 	return filepath.Join(homeDir, ".sinkzone", "sinkzone.yaml")
 }
 

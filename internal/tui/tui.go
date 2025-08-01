@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -260,7 +261,20 @@ func (m Model) loadAllowlistData() {
 	if err != nil {
 		return
 	}
-	allowlistPath := filepath.Join(homeDir, ".sinkzone", "allowlist.txt")
+
+	var allowlistPath string
+	if runtime.GOOS == "windows" {
+		// On Windows, use AppData for better compatibility
+		appData := os.Getenv("APPDATA")
+		if appData != "" {
+			allowlistPath = filepath.Join(appData, "sinkzone", "allowlist.txt")
+		} else {
+			allowlistPath = filepath.Join(homeDir, "sinkzone", "allowlist.txt")
+		}
+	} else {
+		// Unix-like systems use ~/.sinkzone/
+		allowlistPath = filepath.Join(homeDir, ".sinkzone", "allowlist.txt")
+	}
 
 	// Validate the path for security
 	if err := validatePath(allowlistPath); err != nil {
@@ -669,7 +683,7 @@ No DNS queries recorded yet.
 
 Try making some web requests to see DNS activity.
 
-Make sure the resolver is running with 'sudo sinkzone resolver'`
+Make sure the resolver is running with 'sinkzone resolver'`
 	}
 
 	// Since we're now keeping only the visible entries, we can simplify this

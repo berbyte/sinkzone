@@ -5,10 +5,32 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/spf13/cobra"
 )
+
+// getAllowlistPath returns the platform-specific path for the allowlist file
+func getAllowlistPath() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+
+	if runtime.GOOS == "windows" {
+		// On Windows, use AppData for better compatibility
+		appData := os.Getenv("APPDATA")
+		if appData != "" {
+			return filepath.Join(appData, "sinkzone", "allowlist.txt"), nil
+		}
+		// Fallback to user home directory
+		return filepath.Join(homeDir, "sinkzone", "allowlist.txt"), nil
+	}
+
+	// Unix-like systems use ~/.sinkzone/
+	return filepath.Join(homeDir, ".sinkzone", "allowlist.txt"), nil
+}
 
 var allowlistCmd = &cobra.Command{
 	Use:   "allowlist [add/remove/list] [domain]",
@@ -47,12 +69,10 @@ Monitor DNS requests first to discover which domains are needed for your work.`,
 }
 
 func addToAllowlist(domain string) error {
-	homeDir, err := os.UserHomeDir()
+	allowlistPath, err := getAllowlistPath()
 	if err != nil {
-		return fmt.Errorf("failed to get home directory: %w", err)
+		return fmt.Errorf("failed to get allowlist path: %w", err)
 	}
-
-	allowlistPath := filepath.Join(homeDir, ".sinkzone", "allowlist.txt")
 
 	// Create directory if it doesn't exist
 	if err := os.MkdirAll(filepath.Dir(allowlistPath), 0750); err != nil {
@@ -114,12 +134,10 @@ func addToAllowlist(domain string) error {
 }
 
 func removeFromAllowlist(domain string) error {
-	homeDir, err := os.UserHomeDir()
+	allowlistPath, err := getAllowlistPath()
 	if err != nil {
-		return fmt.Errorf("failed to get home directory: %w", err)
+		return fmt.Errorf("failed to get allowlist path: %w", err)
 	}
-
-	allowlistPath := filepath.Join(homeDir, ".sinkzone", "allowlist.txt")
 
 	// Check if allowlist file exists
 	if _, err := os.Stat(allowlistPath); os.IsNotExist(err) {
@@ -175,12 +193,10 @@ func removeFromAllowlist(domain string) error {
 }
 
 func listAllowlist() error {
-	homeDir, err := os.UserHomeDir()
+	allowlistPath, err := getAllowlistPath()
 	if err != nil {
-		return fmt.Errorf("failed to get home directory: %w", err)
+		return fmt.Errorf("failed to get allowlist path: %w", err)
 	}
-
-	allowlistPath := filepath.Join(homeDir, ".sinkzone", "allowlist.txt")
 
 	// Check if allowlist file exists
 	if _, err := os.Stat(allowlistPath); os.IsNotExist(err) {

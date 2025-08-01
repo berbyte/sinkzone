@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/berbyte/sinkzone/internal/api"
+	"github.com/berbyte/sinkzone/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -68,7 +69,7 @@ func enableFocusMode(duration time.Duration) error {
 
 	// Try to connect to API
 	if err := client.HealthCheck(); err != nil {
-		return fmt.Errorf("failed to connect to resolver API: %w\nMake sure the resolver is running with 'sudo sinkzone resolver'", err)
+		return config.AdminError(err, "failed to connect to resolver API")
 	}
 
 	// Set focus mode via API
@@ -88,7 +89,7 @@ func disableFocusMode() error {
 
 	// Try to connect to API
 	if err := client.HealthCheck(); err != nil {
-		return fmt.Errorf("failed to connect to resolver API: %w\nMake sure the resolver is running with 'sudo sinkzone resolver'", err)
+		return config.AdminError(err, "failed to connect to resolver API")
 	}
 
 	// Set focus mode via API

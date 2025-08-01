@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -26,12 +27,10 @@ type StateManager struct {
 
 // NewStateManager creates a new state manager
 func NewStateManager() (*StateManager, error) {
-	homeDir, err := os.UserHomeDir()
+	statePath, err := getStatePath()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get home directory: %w", err)
+		return nil, fmt.Errorf("failed to get state path: %w", err)
 	}
-
-	statePath := filepath.Join(homeDir, ".sinkzone", "state.json")
 
 	sm := &StateManager{
 		statePath: statePath,
@@ -231,4 +230,25 @@ func (sm *StateManager) WatchState(updateChan chan State) {
 			time.Sleep(100 * time.Millisecond)
 		}
 	}()
+}
+
+// getStatePath returns the platform-specific path for the state file
+func getStatePath() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+
+	if runtime.GOOS == "windows" {
+		// On Windows, use AppData for better compatibility
+		appData := os.Getenv("APPDATA")
+		if appData != "" {
+			return filepath.Join(appData, "sinkzone", "state.json"), nil
+		}
+		// Fallback to user home directory
+		return filepath.Join(homeDir, "sinkzone", "state.json"), nil
+	}
+
+	// Unix-like systems use ~/.sinkzone/
+	return filepath.Join(homeDir, ".sinkzone", "state.json"), nil
 }

@@ -4,12 +4,34 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/berbyte/sinkzone/internal/api"
 	"github.com/berbyte/sinkzone/internal/config"
 	"github.com/spf13/cobra"
 )
+
+// getPIDFilePath returns the platform-specific path for the PID file
+func getPIDFilePath() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+
+	if runtime.GOOS == "windows" {
+		// On Windows, use AppData for better compatibility
+		appData := os.Getenv("APPDATA")
+		if appData != "" {
+			return filepath.Join(appData, "sinkzone", "resolver.pid"), nil
+		}
+		// Fallback to user home directory
+		return filepath.Join(homeDir, "sinkzone", "resolver.pid"), nil
+	}
+
+	// Unix-like systems use ~/.sinkzone/
+	return filepath.Join(homeDir, ".sinkzone", "resolver.pid"), nil
+}
 
 var statusAPIURL string
 
@@ -63,12 +85,10 @@ func showGeneralStatus() error {
 }
 
 func showResolverStatus() error {
-	homeDir, err := os.UserHomeDir()
+	pidFile, err := getPIDFilePath()
 	if err != nil {
-		return fmt.Errorf("failed to get home directory: %w", err)
+		return fmt.Errorf("failed to get PID file path: %w", err)
 	}
-
-	pidFile := filepath.Join(homeDir, ".sinkzone", "resolver.pid")
 
 	if _, err := os.Stat(pidFile); os.IsNotExist(err) {
 		fmt.Println("Resolver: NOT RUNNING")

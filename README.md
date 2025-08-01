@@ -35,9 +35,7 @@
 - [Motivation](#motivation)
 - [Key Features](#key-features)
 - [Quick Start](#quick-start)
-  - [Docker](#docker)
-  - [Configure System DNS (Required)](#configure-system-dns-required)
-  - [Alternative Installation Methods](#alternative-installation-methods)
+  - [Installation by Platform](#installation-by-platform)
 - [Demos](#demos)
   - [Command Line Interface (CLI)](#command-line-interface-cli)
   - [Terminal User Interface (TUI)](#terminal-user-interface-tui)
@@ -45,9 +43,11 @@
   - [Manual Page](#manual-page)
 - [Usage](#usage)
   - [Common Commands](#common-commands)
+  - [Wildcard Patterns](#wildcard-patterns)
   - [TUI Navigation](#tui-navigation)
 - [How It Works](#how-it-works)
   - [Architecture](#architecture)
+  - [API Endpoints](#api-endpoints)
   - [Normal Mode](#normal-mode)
   - [Focus Mode](#focus-mode)
 - [Configuration](#configuration)
@@ -98,75 +98,12 @@ Now I can code for hours uninterrupted. Even my son uses Sinkzone during chess p
 
 ## Quick Start
 
-### Docker
-
-The easiest way to run Sinkzone on any platform:
-
-```bash
-# Pull and run the latest image
-docker run -d \
-  --name sinkzone \
-  -p 53:5353/udp \
-  --restart unless-stopped \
-  -v ~/.sinkzone:/app/.sinkzone \
-  ghcr.io/berbyte/sinkzone:latest resolver --port 5353
-```
-
-**That's it!** Sinkzone is now running and blocking distractions at the DNS level.
-
-**Note:** Docker images are available for both Intel and Apple Silicon architectures and will be automatically selected based on your platform.
-
-**Security:** The Docker container runs as a non-root user and binds to an unprivileged port (5353) internally, which is then exposed as port 53 on the host. This eliminates the need for root privileges while maintaining the same functionality.
-
-**Next steps:**
-```bash
-# Check status
-docker exec sinkzone status
-
-# View DNS requests
-docker exec sinkzone monitor
-
-# Add github.com
-docker exec sinkzone allowlist add github.com
-
-# Enable focus mode
-docker exec sinkzone focus start
-
-# View logs
-docker logs -f sinkzone
-
-# Run any other sinkzone command
-docker exec sinkzone --help
-```
-
-### Configure System DNS (Required)
-
-**Important:** You must configure your system to use Sinkzone as the DNS resolver for it to work.
-
-**macOS:**
-```bash
-sudo networksetup -setdnsservers "Wi-Fi" 127.0.0.1
-```
-
-**Linux:**
-```bash
-echo "nameserver 127.0.0.1" | sudo tee /etc/resolv.conf
-```
-
-**Windows:**
-- Open Network & Internet settings
-- Change adapter options
-- Right-click your network adapter → Properties
-- Select "Internet Protocol Version 4 (TCP/IPv4)" → Properties
-- Select "Use the following DNS server addresses"
-- Enter `127.0.0.1` as the preferred DNS server
-
-### Alternative Installation Methods
+### Installation by Platform
 
 <details>
-<summary><b>📦 Package Managers</b></summary>
+<summary><b>🍎 macOS Installation</b></summary>
 
-**Homebrew (macOS):**
+**Homebrew (Recommended):**
 ```bash
 brew tap berbyte/ber
 brew install berbyte/ber/sinkzone
@@ -174,11 +111,8 @@ brew install berbyte/ber/sinkzone
 
 **Manual Setup:**
 ```bash
-# 1. Start the DNS Resolver (default port 53, requires root)
+# 1. Start the DNS Resolver (default port 53, requires admin privileges)
 sudo sinkzone resolver
-
-# Or use an unprivileged port (no root required)
-sinkzone resolver --port 5353
 
 # 2. Launch the UI (in another terminal)
 sinkzone tui
@@ -187,28 +121,12 @@ sinkzone tui
 sinkzone focus start
 ```
 
-</details>
-
-<details>
-<summary><b>🔨 Build from Source</b></summary>
-
+**Configure System DNS (Required):**
 ```bash
-# Clone and build
-git clone https://github.com/berbyte/sinkzone.git
-cd sinkzone
-go build -o sinkzone .
-
-# Follow the manual setup steps above
+sudo networksetup -setdnsservers "Wi-Fi" 127.0.0.1
 ```
 
-</details>
-
-<details>
-<summary><b>📥 Direct Download</b></summary>
-
-Download the appropriate binary for your platform:
-
-**macOS:**
+**Direct Download:**
 ```bash
 # Apple Silicon (M1/M2)
 curl -L -o sinkzone https://github.com/berbyte/sinkzone/releases/latest/download/sinkzone-darwin-arm64
@@ -221,7 +139,11 @@ chmod +x sinkzone
 sudo mv sinkzone /usr/local/bin/
 ```
 
-**Linux:**
+</details>
+
+<details>
+<summary><b>🐧 Linux Installation</b></summary>
+
 ```bash
 # AMD64
 curl -L -o sinkzone https://github.com/berbyte/sinkzone/releases/latest/download/sinkzone-linux-amd64
@@ -232,6 +154,77 @@ sudo mv sinkzone /usr/local/bin/
 curl -L -o sinkzone https://github.com/berbyte/sinkzone/releases/latest/download/sinkzone-linux-arm64
 chmod +x sinkzone
 sudo mv sinkzone /usr/local/bin/
+```
+
+**Manual Setup:**
+```bash
+# 1. Start the DNS Resolver (default port 53, requires admin privileges)
+sudo sinkzone resolver
+
+# 2. Launch the UI (in another terminal)
+sinkzone tui
+
+# 3. Enable Focus Mode
+sinkzone focus start
+```
+
+**Configure System DNS (Required):**
+```bash
+echo "nameserver 127.0.0.1" | sudo tee /etc/resolv.conf
+```
+
+</details>
+
+<details>
+<summary><b>🪟 Windows Installation</b></summary>
+
+**Direct Download:**
+```powershell
+# AMD64
+Invoke-WebRequest -Uri "https://github.com/berbyte/sinkzone/releases/latest/download/sinkzone-windows-amd64.exe" -OutFile "sinkzone.exe"
+# Move to a directory in your PATH (e.g., C:\Windows\System32 or create a custom directory)
+Move-Item sinkzone.exe C:\Windows\System32\sinkzone.exe
+
+# ARM64
+Invoke-WebRequest -Uri "https://github.com/berbyte/sinkzone/releases/latest/download/sinkzone-windows-arm64.exe" -OutFile "sinkzone.exe"
+# Move to a directory in your PATH (e.g., C:\Windows\System32 or create a custom directory)
+Move-Item sinkzone.exe C:\Windows\System32\sinkzone.exe
+```
+
+**Manual Setup:**
+```powershell
+# 1. Start the DNS Resolver (run as Administrator for port 53)
+sinkzone resolver
+
+# 2. Launch the UI (in another terminal)
+sinkzone tui
+
+# 3. Enable Focus Mode
+sinkzone focus start
+```
+
+**Configure System DNS (Required):**
+- Open Network & Internet settings
+- Change adapter options
+- Right-click your network adapter → Properties
+- Select "Internet Protocol Version 4 (TCP/IPv4)" → Properties
+- Select "Use the following DNS server addresses"
+- Enter `127.0.0.1` as the preferred DNS server
+
+**Note:** On Windows, you may need to run the resolver as Administrator for port 53, or use an unprivileged port like 5353.
+
+</details>
+
+<details>
+<summary><b>🔨 Build from Source</b></summary>
+
+```bash
+# Clone and build
+git clone https://github.com/berbyte/sinkzone.git
+cd sinkzone
+go build -o sinkzone .
+
+# Follow the manual setup steps above for your platform
 ```
 
 </details>
@@ -277,7 +270,7 @@ sinkzone man
 | ------------------------ | ------------------------------ |
 | `sinkzone monitor`       | Show last 20 DNS requests      |
 | `sinkzone tui`           | Launch the terminal UI         |
-| `sudo sinkzone resolver` | Start DNS resolver on port 53  |
+| `sinkzone resolver`      | Start DNS resolver on port 53  |
 | `sinkzone focus start`   | Enable focus mode for 1 hour   |
 | `sinkzone focus --disable` | Disable focus mode immediately |
 | `sinkzone status`        | View current focus mode state  |
@@ -287,6 +280,8 @@ sinkzone man
 | `sinkzone allowlist list` | List all allowed domains |
 | `sinkzone config set resolver <ip>` | Set resolver IP |
 | `sinkzone man` | Show manual page |
+
+**Note:** On Unix-like systems (macOS/Linux), you may need to run `sudo sinkzone resolver` for port 53. On Windows, run as Administrator or use an unprivileged port like 5353.
 
 ### Wildcard Patterns
 
@@ -350,7 +345,7 @@ The resolver exposes the following HTTP endpoints:
 **API Usage Examples:**
 ```bash
 # Start resolver with custom API port
-sudo sinkzone resolver --port 53 --api-port 8080
+sinkzone resolver --port 53 --api-port 8080
 
 # Use CLI with custom API URL
 sinkzone monitor --api-url http://localhost:8080
@@ -409,7 +404,7 @@ go build -o sinkzone .
 go test ./...
 
 # Run resolver with custom ports
-sudo sinkzone resolver --port 5353 --api-port 8080
+sinkzone resolver --port 5353 --api-port 8080
 
 # Test API endpoints
 curl http://localhost:8080/health

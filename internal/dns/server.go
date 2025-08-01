@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -46,7 +47,19 @@ func NewServerWithPort(cfg *config.Config, apiServer *api.Server, port string) *
 		homeDir = "."
 	}
 
-	allowlistPath := filepath.Join(homeDir, ".sinkzone", "allowlist.txt")
+	var allowlistPath string
+	if runtime.GOOS == "windows" {
+		// On Windows, use AppData for better compatibility
+		appData := os.Getenv("APPDATA")
+		if appData != "" {
+			allowlistPath = filepath.Join(appData, "sinkzone", "allowlist.txt")
+		} else {
+			allowlistPath = filepath.Join(homeDir, "sinkzone", "allowlist.txt")
+		}
+	} else {
+		// Unix-like systems use ~/.sinkzone/
+		allowlistPath = filepath.Join(homeDir, ".sinkzone", "allowlist.txt")
+	}
 
 	return &Server{
 		config:        cfg,
@@ -192,7 +205,20 @@ func (s *Server) createPIDFile() error {
 		return fmt.Errorf("failed to get home directory: %w", err)
 	}
 
-	pidDir := filepath.Join(homeDir, ".sinkzone")
+	var pidDir string
+	if runtime.GOOS == "windows" {
+		// On Windows, use AppData for better compatibility
+		appData := os.Getenv("APPDATA")
+		if appData != "" {
+			pidDir = filepath.Join(appData, "sinkzone")
+		} else {
+			pidDir = filepath.Join(homeDir, "sinkzone")
+		}
+	} else {
+		// Unix-like systems use ~/.sinkzone/
+		pidDir = filepath.Join(homeDir, ".sinkzone")
+	}
+
 	if err := os.MkdirAll(pidDir, 0750); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
@@ -213,7 +239,19 @@ func (s *Server) cleanupPIDFile() {
 		return
 	}
 
-	pidFile := filepath.Join(homeDir, ".sinkzone", "resolver.pid")
+	var pidFile string
+	if runtime.GOOS == "windows" {
+		// On Windows, use AppData for better compatibility
+		appData := os.Getenv("APPDATA")
+		if appData != "" {
+			pidFile = filepath.Join(appData, "sinkzone", "resolver.pid")
+		} else {
+			pidFile = filepath.Join(homeDir, "sinkzone", "resolver.pid")
+		}
+	} else {
+		// Unix-like systems use ~/.sinkzone/
+		pidFile = filepath.Join(homeDir, ".sinkzone", "resolver.pid")
+	}
 	if err := os.Remove(pidFile); err != nil && !os.IsNotExist(err) {
 		log.Printf("Warning: failed to remove PID file: %v", err)
 	}

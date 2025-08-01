@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/berbyte/sinkzone/internal/api"
+	"github.com/berbyte/sinkzone/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -23,7 +24,7 @@ Make sure the resolver is running before using this command.`,
 
 		// Try to connect to API
 		if err := client.HealthCheck(); err != nil {
-			return fmt.Errorf("failed to connect to resolver API: %w\nMake sure the resolver is running with 'sudo sinkzone resolver'", err)
+			return config.AdminError(err, "failed to connect to resolver API")
 		}
 		fmt.Printf("Connected successfully!\n")
 

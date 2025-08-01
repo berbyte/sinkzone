@@ -30,6 +30,11 @@ The HTTP API provides endpoints for:
 Once running, other features like monitoring, allowlisting, and focus mode become active.
 `,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Check admin privileges for privileged ports
+		if err := config.CheckPortPrivileges(port); err != nil {
+			return err
+		}
+
 		// Load configuration
 		cfg, err := config.Load()
 		if err != nil {
