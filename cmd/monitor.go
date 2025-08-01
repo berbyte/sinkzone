@@ -78,5 +78,4 @@ Make sure the resolver is running before using this command.`,
 
 func init() {
 	monitorCmd.Flags().StringVarP(&apiURL, "api-url", "u", "http://localhost:8080", "URL of the resolver API")
-	rootCmd.AddCommand(monitorCmd)
 }

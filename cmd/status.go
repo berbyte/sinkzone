@@ -63,7 +63,6 @@ Use this to get a quick overview of what Sinkzone is doing.`,
 
 func init() {
 	statusCmd.Flags().StringVar(&statusAPIURL, "api-url", "http://localhost:8080", "URL of the resolver API")
-	rootCmd.AddCommand(statusCmd)
 }
 
 func showGeneralStatus() error {

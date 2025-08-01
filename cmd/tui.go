@@ -17,6 +17,5 @@ var tuiCmd = &cobra.Command{
 }
 
 func init() {
-	tuiCmd.Flags().StringVar(&tuiAPIURL, "api-url", "http://localhost:8080", "URL of the resolver API")
-	rootCmd.AddCommand(tuiCmd)
+	tuiCmd.Flags().StringVarP(&tuiAPIURL, "api-url", "u", "http://localhost:8080", "URL of the resolver API")
 }

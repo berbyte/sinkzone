@@ -85,5 +85,4 @@ Once running, other features like monitoring, allowlisting, and focus mode becom
 func init() {
 	resolverCmd.Flags().StringVarP(&port, "port", "p", "53", "Port to bind the DNS server to")
 	resolverCmd.Flags().StringVarP(&apiPort, "api-port", "a", "8080", "Port to bind the HTTP API server to")
-	rootCmd.AddCommand(resolverCmd)
 }
