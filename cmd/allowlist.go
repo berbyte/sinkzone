@@ -17,6 +17,11 @@ var allowlistCmd = &cobra.Command{
 
 During focus sessions, all DNS requests are blocked except for domains in your allowlist. You can use 'sinkzone allowlist add <domain>' to permit access, 'remove <domain>' to revoke it, or 'list' to see all allowed domains.
 
+Wildcard patterns are supported:
+  * "*github*" matches any domain containing "github"
+  * "*.example.com" matches all subdomains of example.com
+  * "api.*.com" matches api.anydomain.com
+
 Monitor DNS requests first to discover which domains are needed for your work.`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -104,6 +109,7 @@ func addToAllowlist(domain string) error {
 	}
 
 	fmt.Printf("Domain '%s' added to allowlist.\n", domain)
+	fmt.Printf("Note: Allowlist changes take effect when you start a new focus session.\n")
 	return nil
 }
 
@@ -164,6 +170,7 @@ func removeFromAllowlist(domain string) error {
 	}
 
 	fmt.Printf("Domain '%s' removed from allowlist.\n", domain)
+	fmt.Printf("Note: Allowlist changes take effect when you start a new focus session.\n")
 	return nil
 }
 

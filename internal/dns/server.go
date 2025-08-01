@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -24,9 +25,10 @@ type Server struct {
 	apiServer *api.Server
 
 	// Allowlist management
-	allowlistPath  string
-	allowlist      map[string]bool
-	allowlistMutex sync.RWMutex
+	allowlistPath    string
+	allowlist        map[string]bool  // Exact domain matches
+	wildcardPatterns []*regexp.Regexp // Compiled wildcard patterns
+	allowlistMutex   sync.RWMutex
 
 	// Focus mode state (in-memory)
 	focusMode    bool
@@ -53,6 +55,31 @@ func NewServerWithPort(cfg *config.Config, apiServer *api.Server, port string) *
 		allowlist:     make(map[string]bool),
 		port:          port,
 	}
+}
+
+// wildcardToRegex converts a wildcard pattern to a regex pattern
+// Examples:
+//
+//	"*github*" -> ".*github.*"
+//	"*.example.com" -> ".*\\.example\\.com"
+//	"api.*.com" -> "api\\..*\\.com"
+func wildcardToRegex(pattern string) (*regexp.Regexp, error) {
+	// Escape regex special characters except *
+	escaped := regexp.QuoteMeta(pattern)
+
+	// Replace escaped asterisks with .*
+	// We need to handle the case where * was escaped by QuoteMeta
+	escaped = strings.ReplaceAll(escaped, "\\*", ".*")
+
+	// Add anchors to ensure full match
+	regexPattern := "^" + escaped + "$"
+
+	return regexp.Compile(regexPattern)
+}
+
+// isWildcardPattern checks if a pattern contains wildcards
+func isWildcardPattern(pattern string) bool {
+	return strings.Contains(pattern, "*")
 }
 
 func (s *Server) Start() error {
@@ -105,10 +132,23 @@ func (s *Server) loadAllowlist() error {
 		scanner := bufio.NewScanner(file)
 		s.allowlistMutex.Lock()
 		s.allowlist = make(map[string]bool)
+		s.wildcardPatterns = nil // Reset wildcard patterns
+
 		for scanner.Scan() {
-			domain := strings.TrimSpace(scanner.Text())
-			if domain != "" && !strings.HasPrefix(domain, "#") {
-				s.allowlist[domain] = true
+			pattern := strings.TrimSpace(scanner.Text())
+			if pattern != "" && !strings.HasPrefix(pattern, "#") {
+				if isWildcardPattern(pattern) {
+					// Compile wildcard pattern
+					if regex, err := wildcardToRegex(pattern); err == nil {
+						s.wildcardPatterns = append(s.wildcardPatterns, regex)
+						log.Printf("Loaded wildcard pattern: %s", pattern)
+					} else {
+						log.Printf("Warning: invalid wildcard pattern '%s': %v", pattern, err)
+					}
+				} else {
+					// Exact domain match
+					s.allowlist[pattern] = true
+				}
 			}
 		}
 		s.allowlistMutex.Unlock()
@@ -132,6 +172,15 @@ func (s *Server) setFocusMode(enabled bool, duration time.Duration) error {
 		s.focusEndTime = nil
 	}
 	s.focusMutex.Unlock()
+
+	// Reload allowlist when enabling focus mode to pick up any changes
+	if enabled {
+		if err := s.loadAllowlist(); err != nil {
+			log.Printf("Warning: failed to reload allowlist: %v", err)
+		} else {
+			log.Printf("Allowlist reloaded for focus session")
+		}
+	}
 
 	log.Printf("Focus mode set to: %t, duration: %v", enabled, duration)
 	return nil
@@ -310,5 +359,18 @@ func getDNSSerial() uint32 {
 func (s *Server) isAllowed(domain string) bool {
 	s.allowlistMutex.RLock()
 	defer s.allowlistMutex.RUnlock()
-	return s.allowlist[domain]
+
+	// Check exact match first
+	if s.allowlist[domain] {
+		return true
+	}
+
+	// Check wildcard patterns
+	for _, pattern := range s.wildcardPatterns {
+		if pattern.MatchString(domain) {
+			return true
+		}
+	}
+
+	return false
 }

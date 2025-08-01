@@ -64,6 +64,8 @@
 
 Sinkzone is a local DNS resolver that helps you eliminate distractions and get deep work done. It blocks all domains by default — only the ones you explicitly allow can get through. This means notifications, social media, news, and other time-sinks are unreachable at the network level — not just in your browser.
 
+It features a modern HTTP API, wildcard pattern support, and a beautiful terminal UI for real-time monitoring and control.
+
 It's lightweight, cross-platform, and built for hackers, makers, and anyone serious about focus.
 
 ## Motivation
@@ -86,6 +88,8 @@ Now I can code for hours uninterrupted. Even my son uses Sinkzone during chess p
 
 - **DNS-level blocking**: Stops distractions before they reach your apps
 - **Focus Mode**: Block all but allowlisted domains for a set duration
+- **Wildcard Support**: Use patterns like `*github*` or `*.google.com` for flexible domain matching
+- **HTTP API**: RESTful API for monitoring and control
 - **Terminal UI**: Real-time DNS traffic viewer with tabbed interface
 - **Memory-backed rules**: Focus mode expires automatically
 - **Cross-platform**: Works on macOS and Linux
@@ -278,10 +282,37 @@ sinkzone man
 | `sinkzone focus --disable` | Disable focus mode immediately |
 | `sinkzone status`        | View current focus mode state  |
 | `sinkzone allowlist add <domain>` | Add domain to allowlist |
+| `sinkzone allowlist add "*github*"` | Add wildcard pattern |
 | `sinkzone allowlist remove <domain>` | Remove domain from allowlist |
 | `sinkzone allowlist list` | List all allowed domains |
 | `sinkzone config set resolver <ip>` | Set resolver IP |
 | `sinkzone man` | Show manual page |
+
+### Wildcard Patterns
+
+Sinkzone supports wildcard patterns for flexible domain matching:
+
+| Pattern | Matches | Examples |
+|---------|---------|----------|
+| `*github*` | Any domain containing "github" | `github.com`, `api.github.com`, `githubusercontent.com` |
+| `*.google.com` | All subdomains of google.com | `maps.google.com`, `drive.google.com`, `docs.google.com` |
+| `api.*.com` | Any api subdomain of .com domains | `api.github.com`, `api.example.com`, `api.stackoverflow.com` |
+| `exact.com` | Exact domain match only | `exact.com` (not `sub.exact.com`) |
+
+**Examples:**
+```bash
+# Allow all GitHub-related domains
+sinkzone allowlist add "*github*"
+
+# Allow all Google subdomains
+sinkzone allowlist add "*.google.com"
+
+# Allow all API subdomains
+sinkzone allowlist add "api.*.com"
+
+# Allow exact domain
+sinkzone allowlist add "stackoverflow.com"
+```
 
 ### TUI Navigation
 
@@ -316,6 +347,24 @@ The resolver exposes the following HTTP endpoints:
 - `GET /api/state` - Get complete resolver state
 - `GET /health` - Health check endpoint
 
+**API Usage Examples:**
+```bash
+# Start resolver with custom API port
+sudo sinkzone resolver --port 53 --api-port 8080
+
+# Use CLI with custom API URL
+sinkzone monitor --api-url http://localhost:8080
+sinkzone focus --enable --api-url http://localhost:8080
+sinkzone tui --api-url http://localhost:8080
+
+# Direct API calls
+curl http://localhost:8080/api/queries
+curl http://localhost:8080/api/focus
+curl -X POST http://localhost:8080/api/focus \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true, "duration": "1h"}'
+```
+
 ### Normal Mode
 
 * All DNS queries are forwarded to upstream resolvers
@@ -326,6 +375,7 @@ The resolver exposes the following HTTP endpoints:
 * Only allowlisted domains resolve
 * Everything else returns `NXDOMAIN`
 * Automatically expires after specified duration
+* Allowlist is reloaded when focus mode is enabled (changes take effect on new focus sessions)
 
 ---
 
@@ -334,8 +384,18 @@ The resolver exposes the following HTTP endpoints:
 Files are stored in `~/.sinkzone/`:
 
 * `sinkzone.yaml`: Main config
-* `sinkzone.sock`: Unix socket for real-time communication between resolver and TUI
-* `allowlist.txt`: Simple text file containing allowed domains
+* `allowlist.txt`: Simple text file containing allowed domains (supports wildcard patterns)
+* `resolver.pid`: Process ID file for the DNS resolver
+
+**Allowlist Format:**
+```
+# Comments start with #
+github.com
+stackoverflow.com
+*github*
+*.google.com
+api.*.com
+```
 
 ---
 
@@ -348,9 +408,21 @@ go build -o sinkzone .
 # Run tests
 go test ./...
 
-# Run directly
-go run main.go
+# Run resolver with custom ports
+sudo sinkzone resolver --port 5353 --api-port 8080
+
+# Test API endpoints
+curl http://localhost:8080/health
+curl http://localhost:8080/api/queries
+
+# Run TUI with custom API URL
+sinkzone tui --api-url http://localhost:8080
 ```
+
+**Architecture:**
+- DNS Server: Handles DNS resolution and blocking
+- HTTP API Server: Provides REST endpoints for monitoring and control
+- CLI/TUI: User interfaces that communicate via HTTP API
 
 PRs and issues welcome. We love contributors.
 
