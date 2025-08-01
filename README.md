@@ -6,11 +6,9 @@
   <p align="center">
       The internet is infinite. Your focus isn’t. <br />
       <br />
-      Sinkzone helps you reclaim control by flipping the default: <strong>everything is blocked</strong>, unless you explicitly allow it. <br/>
-      No feeds.<br /> 
-      No pings.<br />
-      No surprise connections.<br />
-      <strong>Just a quiet, intentional internet.</strong>
+      Sinkzone helps you reclaim control by flipping the default: <strong>everything is blocked</strong>, unless you explicitly allow it. <br/><br/>
+      No feeds. No pings. No surprise connections.<br />
+      <h2>Just a quiet, intentional internet.</h2>
     <br /><br />
     <img src="examples/demo-tui.gif" alt="Sinkzone Demo" />
     <br /><br />
