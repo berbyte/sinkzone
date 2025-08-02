@@ -64,8 +64,8 @@ brews:
       bin.install "sinkzone"
       man1.install "docs/sinkzone.1"
       rm Dir["#{bin}/{sinkzone-completion.bash,sinkzone-completion.zsh}"]
-      system bin/"sinkzone", "completion", "--shell", "bash"
-      system bin/"sinkzone", "completion", "--shell", "zsh"
+      system bin/"sinkzone", "completion", "bash"
+      system bin/"sinkzone", "completion", "zsh"
       bash_completion.install "sinkzone-completion.bash"
       zsh_completion.install "sinkzone-completion.zsh"
       (zsh_completion/"_sinkzone").write <<~EOS
