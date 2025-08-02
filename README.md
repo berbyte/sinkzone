@@ -156,6 +156,37 @@ sudo mv sinkzone /usr/local/bin/
 <details>
 <summary><b>👉 Linux Installation</b></summary>
 
+**Package Managers (Recommended):**
+
+**Debian/Ubuntu:**
+```bash
+# Download and install the .deb package
+curl -L -O https://github.com/berbyte/sinkzone/releases/latest/download/sinkzone-linux-amd64.deb
+sudo dpkg -i sinkzone-linux-amd64.deb
+```
+
+**Red Hat/Fedora/CentOS:**
+```bash
+# Download and install the .rpm package
+curl -L -O https://github.com/berbyte/sinkzone/releases/latest/download/sinkzone-linux-amd64.rpm
+sudo rpm -i sinkzone-linux-amd64.rpm
+```
+
+**Alpine Linux:**
+```bash
+# Download and install the .apk package
+curl -L -O https://github.com/berbyte/sinkzone/releases/latest/download/sinkzone-linux-amd64.apk
+sudo apk add --allow-untrusted sinkzone-linux-amd64.apk
+```
+
+**Arch Linux:**
+```bash
+# Download and install the .pkg.tar.zst package
+curl -L -O https://github.com/berbyte/sinkzone/releases/latest/download/sinkzone-linux-amd64.pkg.tar.zst
+sudo pacman -U sinkzone-linux-amd64.pkg.tar.zst
+```
+
+**Manual Installation:**
 ```bash
 # AMD64
 curl -L -o sinkzone https://github.com/berbyte/sinkzone/releases/latest/download/sinkzone-linux-amd64
@@ -184,6 +215,8 @@ sinkzone focus start
 ```bash
 echo "nameserver 127.0.0.1" | sudo tee /etc/resolv.conf
 ```
+
+**Note:** Package installations include the manual page. Run `man sinkzone` for detailed documentation.
 
 </details>
 
