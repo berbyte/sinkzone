@@ -28,6 +28,7 @@ archives:
       - binary
 
 nfpms:
+  - package_name: sinkzone
     formats:
       - apk
       - deb
