@@ -28,14 +28,14 @@ archives:
       - binary
 
 nfpms:
-  - name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
     formats:
       - apk
       - deb
       - rpm
       - archlinux
-    files:
-      docs/sinkzone.1: usr/share/man/man1/sinkzone.1
+    contents:
+      - src: docs/sinkzone.1
+        dst: usr/share/man/man1/sinkzone.1
     maintainer: "dOMiNiS <dominis@ber.run>"
     vendor: "berbyte"
     homepage: "https://github.com/berbyte/sinkzone"
