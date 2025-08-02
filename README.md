@@ -262,6 +262,8 @@ sinkzone focus start
 
 </details>
 
+---
+
 <details>
 <summary><b>👉 Build from Source</b></summary>
 

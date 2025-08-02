@@ -29,6 +29,7 @@ archives:
 
 nfpms:
   - package_name: sinkzone
+    file_name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
     formats:
       - apk
       - deb
