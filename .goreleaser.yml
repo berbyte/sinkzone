@@ -27,6 +27,38 @@ archives:
     formats:
       - binary
 
+nfpms:
+  - name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
+    formats:
+      - apk
+      - deb
+      - rpm
+      - archlinux
+    files:
+      docs/sinkzone.1: usr/share/man/man1/sinkzone.1
+    maintainer: "dOMiNiS <dominis@ber.run>"
+    vendor: "berbyte"
+    homepage: "https://github.com/berbyte/sinkzone"
+    license: "MIT"
+    description: "A strict DNS filter to help you stay focused — or keep your kids safe"
+    long_description: |
+      Sinkzone is a DNS-based productivity tool designed to reduce distractions and help you focus. 
+      It works by running a local DNS resolver that intercepts domain name queries. During focus 
+      sessions, only domains explicitly allowed via the allowlist will resolve — everything else 
+      is silently blocked.
+      
+      Features:
+      - Local DNS resolver for network-level blocking
+      - Focus mode with configurable duration
+      - Domain allowlist management
+      - Real-time DNS request monitoring
+      - Interactive terminal interface
+      - Cross-platform support
+    section: "net"
+    priority: "optional"
+    depends:
+      - "glibc"
+
 checksum:
   name_template: checksums.txt
 
@@ -42,3 +74,6 @@ brews:
       owner: berbyte
       name: homebrew-tap
       token: "{{ .Env.GH_PAT }}"
+    install:
+      - bin.install "sinkzone"
+      - man1.install "docs/sinkzone.1"

@@ -34,11 +34,9 @@
 <details>
 <summary><b>📚 Table of Contents</b></summary>
 
-
-
 - [What is Sinkzone?](#what-is-sinkzone)
 - [Motivation](#motivation)
-  - [Why use Sinkzone?](#why-use-sinkzone)
+- [Why use Sinkzone?](#why-use-sinkzone)
 - [Key Features](#key-features)
 - [Quick Start](#quick-start)
   - [Installation by Platform](#installation-by-platform)
@@ -87,10 +85,10 @@ Now I can code for hours uninterrupted. Even my son uses Sinkzone during chess p
 
 ---
 
-### Why use Sinkzone?
+## Why use Sinkzone?
 
 - Avoid distraction without browser extensions or hacks
-- Run locally on macOS or Linux — no cloud, no telemetry
+- Run locally on macOS, Linux and Windows — no cloud, no telemetry
 - Perfect for deep work sessions, writing, coding, or child safety
 - Terminal UI included — toggle modes, view logs, edit allowlist
 
@@ -153,6 +151,8 @@ sudo mv sinkzone /usr/local/bin/
 
 </details>
 
+---
+
 <details>
 <summary><b>👉 Linux Installation</b></summary>
 
@@ -186,6 +186,8 @@ echo "nameserver 127.0.0.1" | sudo tee /etc/resolv.conf
 ```
 
 </details>
+
+---
 
 <details>
 <summary><b>👉 Windows Installation</b></summary>
