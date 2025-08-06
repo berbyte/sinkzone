@@ -1,0 +1,104 @@
+.TH SINKZONE 1 "July 2025" "Sinkzone 0.1.0" "User Commands"
+.SH NAME
+sinkzone \- DNS-based productivity tool that blocks distractions and helps you stay focused
+.SH SYNOPSIS
+.B sinkzone
+[\fICOMMAND\fR] [\fIOPTIONS\fR]
+.SH DESCRIPTION
+Sinkzone is a DNS-based productivity tool designed to reduce distractions and help you focus. It works by running a local DNS resolver that intercepts domain name queries. During focus sessions, only domains explicitly allowed via the allowlist will resolve — everything else is silently blocked.
+
+The typical workflow:
+.IP 1.
+Start the DNS resolver with \fBsinkzone resolver\fR
+.IP 2.
+Use \fBsinkzone monitor\fR to view live DNS requests
+.IP 3.
+Add essential domains to your allowlist with \fBsinkzone allowlist add\fR
+.IP 4.
+Enable focus mode with \fBsinkzone focus enable <duration>\fR
+
+.SH COMMANDS
+
+.TP
+.B sinkzone resolver
+Starts the DNS resolver service. This must be run first to enable all other functionality.
+
+.TP
+.B sinkzone monitor
+Displays live DNS requests. Useful for discovering which domains your apps and websites access.
+
+.TP
+.B sinkzone allowlist add <domain>
+Adds a domain to the allowlist (e.g., google.com). Only allowlisted domains resolve during focus mode.
+
+.TP
+.B sinkzone allowlist remove <domain>
+Removes a domain from the allowlist.
+
+.TP
+.B sinkzone allowlist list
+Lists all domains currently in the allowlist.
+
+.TP
+.B sinkzone focus --enable --duration 1h
+Enables focus mode for a specified duration (e.g., 1h). All non-allowlisted DNS queries are blocked.
+
+.TP
+.B sinkzone focus --disable
+Disables focus mode immediately.
+
+.TP
+.B sinkzone focus status
+Displays whether focus mode is currently enabled.
+
+.TP
+.B sinkzone status
+Shows overall system status: resolver running, focus mode status, recent queries.
+
+.TP
+.B sinkzone tui
+Launches the interactive terminal interface.
+
+.TP
+.B sinkzone config
+View or update system configuration (e.g., ports, defaults).
+
+.TP
+.B sinkzone completion <shell>
+Generate shell autocompletion scripts (bash, zsh, fish, powershell).
+
+.SH EXAMPLES
+
+.TP
+Start the resolver:
+.B sinkzone resolver
+
+.TP
+Monitor DNS queries:
+.B sinkzone monitor
+
+.TP
+Allow access to GitHub:
+.B sinkzone allowlist add github.com
+
+.TP
+List all allowed domains:
+.B sinkzone allowlist list
+
+.TP
+Start a 90-minute focus session:
+.B sinkzone focus --enable --duration 90m
+
+.SH FILES
+~/.sinkzone/config.yaml
+.br
+Sinkzone configuration file
+
+.SH AUTHOR
+Written by dOMiNiS - dominis@ber.run
+
+.SH COPYRIGHT
+MIT License
+
+.SH SEE ALSO
+.BR dig(1), resolvectl(1) 

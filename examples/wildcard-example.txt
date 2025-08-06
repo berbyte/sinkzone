@@ -1,0 +1,19 @@
+# Sinkzone Allowlist Example with Wildcards
+# Lines starting with # are comments
+
+# Exact domain matches
+github.com
+stackoverflow.com
+docs.python.org
+
+# Wildcard patterns
+*github*
+*.google.com
+api.*.com
+*.stackoverflow.com
+
+# This would match:
+# *github* -> github.com, api.github.com, githubusercontent.com, etc.
+# *.google.com -> maps.google.com, drive.google.com, docs.google.com, etc.
+# api.*.com -> api.github.com, api.example.com, api.stackoverflow.com, etc.
+# *.stackoverflow.com -> stackoverflow.com, meta.stackoverflow.com, etc. 

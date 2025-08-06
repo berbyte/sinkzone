@@ -1,0 +1,35 @@
+# install
+# go install github.com/mgechev/revive@latest
+# curl -sfL https://raw.githubusercontent.com/securego/gosec/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.21.4
+# go install -v github.com/go-critic/go-critic/cmd/gocritic@latest
+
+repos:
+  - repo: https://github.com/tekwizely/pre-commit-golang
+    rev: v1.0.0-rc.1
+    hooks:
+      - id: go-fmt-repo
+      - id: go-build-repo-mod
+      - id: go-mod-tidy-repo
+      - id: go-test-repo-mod
+      - id: golangci-lint-repo-mod
+      - id: go-vet-repo-mod
+      - id: go-revive-repo-mod
+      - id: go-sec-repo-mod
+      - id: go-critic
+        args: [-disable=captLocal]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      # - id: trailing-whitespace
+      - id: mixed-line-ending
+        args: [--fix, lf]
+      - id: check-added-large-files
+      - id: check-yaml
+      - id: forbid-new-submodules
+      - id: no-commit-to-branch
+      - id: check-json
+      - id: pretty-format-json
+        args: [--autofix]

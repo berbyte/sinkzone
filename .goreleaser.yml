@@ -1,0 +1,62 @@
+version: 2
+
+project_name: sinkzone
+
+force_token: github
+
+before:
+  hooks:
+    - go mod download
+
+builds:
+  - binary: sinkzone
+    env:
+      - CGO_ENABLED=0
+    goarch:
+      - amd64
+      - arm64
+    goos:
+      - darwin
+      - linux
+      - windows
+    flags:
+      - -trimpath
+
+archives:
+  - name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
+    formats:
+      - binary
+
+nfpms:
+  - package_name: sinkzone
+    formats:
+      - apk
+      - deb
+      - rpm
+      - archlinux
+    contents:
+      - src: docs/sinkzone.1
+        dst: usr/share/man/man1/sinkzone.1
+    maintainer: "dOMiNiS <dominis@ber.run>"
+    vendor: "berbyte"
+    homepage: "https://github.com/berbyte/sinkzone"
+    license: "MIT"
+    description: "A strict DNS filter to help you stay focused — or keep your kids safe"
+    section: "net"
+    priority: "optional"
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github
+
+brews:
+  - name: sinkzone
+    description: A strict DNS filter to help you stay focused — or keep your kids safe
+    homepage: https://github.com/berbyte/sinkzone
+    license: MIT
+    repository:
+      owner: berbyte
+      name: homebrew-tap
+      token: "{{ .Env.GH_PAT }}"
