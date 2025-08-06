@@ -1,0 +1,49 @@
+---
+networks:
+  dns_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${DOCKER_NETWORK_SUBNET:-172.30.0.0/16}  # Custom subnet for the Docker network
+
+services:
+  sinkzone:
+    build: .
+    container_name: sinkzone
+    restart: unless-stopped
+    ports:
+      # DNS Ports
+      - "5353:5353/tcp"
+      - "5353:5353/udp"
+      # For production use, set to port 53
+      #- "53:53/tcp"
+      #- "53:53/udp"
+      # API Port
+      - "8080:8080/tcp"
+    environment:
+      # Set sinkzone to use unbound as upstream DNS
+      SINKZONE_UPSTREAM_NAMESERVERS: "unbound"
+    cap_add:
+      - NET_ADMIN  # Required for network configuration
+    depends_on:
+      - unbound
+    networks:
+      dns_net:
+
+  unbound:
+    container_name: unbound
+    image: mvance/unbound:latest  # Official Unbound container
+    command: >
+      sh -c "if [ ! -f /opt/unbound/etc/unbound/unbound.conf ]; then \
+              echo 'server:' > /opt/unbound/etc/unbound/unbound.conf && \
+              echo '  interface: 0.0.0.0' >> /opt/unbound/etc/unbound/unbound.conf && \
+              echo '  access-control: 172.30.0.0/16 allow' >> /opt/unbound/etc/unbound/unbound.conf; \
+            fi; \
+            touch /opt/unbound/etc/unbound/a-records.conf /opt/unbound/etc/unbound/srv-records.conf /opt/unbound/etc/unbound/forward-records.conf && \
+            exec unbound -d"
+    ports:
+      - "5335:53/tcp"
+      - "5335:53/udp"
+    restart: unless-stopped
+    networks:
+      dns_net: 

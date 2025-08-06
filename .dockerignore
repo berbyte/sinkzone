@@ -1,0 +1,10 @@
+.git
+.gitignore
+README.md
+LICENSE
+docs/
+examples/
+.github/
+.pre-commit-config.yaml
+.goreleaser.yml
+*.md 

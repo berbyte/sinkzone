@@ -302,6 +302,22 @@ go build -o sinkzone .
 
 ---
 
+<details>
+<summary><b>👉 Docker Setup</b></summary>
+
+For Docker-based deployment with Unbound as the upstream DNS resolver, see [README-Docker.md](README-Docker.md) for complete instructions.
+
+```bash
+# Quick start with Docker
+git clone https://github.com/berbyte/sinkzone.git
+cd sinkzone
+docker compose up -d
+```
+
+</details>
+
+---
+
 
 ## Documentation
 
