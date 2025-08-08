@@ -129,7 +129,7 @@ func (c *Client) GetState() (*ResolverState, error) {
 }
 
 func (c *Client) HealthCheck() error {
-	log.Printf("API Client: Attempting health check to %s/health", c.baseURL)
+	// log.Printf("API Client: Attempting health check to %s/health", c.baseURL)
 
 	resp, err := c.client.Get(c.baseURL + "/health")
 	if err != nil {
@@ -143,7 +143,7 @@ func (c *Client) HealthCheck() error {
 		}
 	}()
 
-	log.Printf("API Client: Health check response status: %d", resp.StatusCode)
+	// log.Printf("API Client: Health check response status: %d", resp.StatusCode)
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -151,7 +151,7 @@ func (c *Client) HealthCheck() error {
 		return fmt.Errorf("health check returned status: %d", resp.StatusCode)
 	}
 
-	body, _ := io.ReadAll(resp.Body)
-	log.Printf("API Client: Health check successful, response: %s", string(body))
+	// body, _ := io.ReadAll(resp.Body)
+	// log.Printf("API Client: Health check successful, response: %s", string(body))
 	return nil
 }
