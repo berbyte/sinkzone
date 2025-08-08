@@ -45,6 +45,18 @@ func Load() (*Config, error) {
 			return nil, fmt.Errorf("failed to save default config: %w", err)
 		}
 	}
+
+	// Check for environment variable override
+	if envNameservers := os.Getenv("SINKZONE_UPSTREAM_NAMESERVERS"); envNameservers != "" {
+		// Split by comma if multiple nameservers are provided
+		nameservers := strings.Split(envNameservers, ",")
+		// Trim whitespace from each nameserver
+		for i, ns := range nameservers {
+			nameservers[i] = strings.TrimSpace(ns)
+		}
+		cfg.UpstreamNameservers = nameservers
+	}
+
 	return cfg, nil
 }
 
