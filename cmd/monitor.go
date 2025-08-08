@@ -47,7 +47,7 @@ Make sure the resolver is running before using this command.`,
 		}
 
 		fmt.Printf("Last %d DNS requests:\n\n", len(queries[start:]))
-		fmt.Printf("%-40s %-10s %-20s %s\n", "Domain", "Status", "Time", "Blocked")
+		fmt.Printf("%-40s %-27s %-10s %-20s %s\n", "Domain", "Client", "Status", "Time", "Blocked")
 		fmt.Println(string(make([]byte, 80)))
 
 		for _, query := range queries[start:] {
@@ -68,7 +68,13 @@ Make sure the resolver is running before using this command.`,
 				domain = domain[:35] + "..."
 			}
 
-			fmt.Printf("%-40s %-10s %-20s %s\n", domain, status, timeStr, blockedStr)
+			// Truncate hostname if too long
+			dnsClient := query.Client
+			if len(dnsClient) > 25 {
+				dnsClient = dnsClient[:22] + "..."
+			}
+
+			fmt.Printf("%-40s %-27s %-10s %-20s %s\n", domain, dnsClient, status, timeStr, blockedStr)
 		}
 
 		fmt.Printf("\nTotal queries: %d\n", len(queries))
