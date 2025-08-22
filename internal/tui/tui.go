@@ -2,8 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -251,32 +249,6 @@ func (m Model) loadInitialData() {
 	}
 }
 
-// validatePath ensures the path is within the user's home directory and doesn't contain path traversal
-func validatePath(path string) error {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get home directory: %w", err)
-	}
-
-	// Resolve any symlinks and get absolute path
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return fmt.Errorf("failed to resolve absolute path: %w", err)
-	}
-
-	// Check if the path is within the home directory
-	if !strings.HasPrefix(absPath, homeDir) {
-		return fmt.Errorf("path is outside home directory: %s", path)
-	}
-
-	// Check for path traversal attempts
-	if strings.Contains(path, "..") {
-		return fmt.Errorf("path contains traversal attempt: %s", path)
-	}
-
-	return nil
-}
-
 func (m *Model) loadAllowlistData() {
 	manager, err := allowlist.NewManager()
 	if err != nil {
@@ -306,7 +278,7 @@ func (m *Model) loadAllowlistData() {
 	}
 }
 
-func (m Model) enableFocusMode() error {
+func (m *Model) enableFocusMode() error {
 	// Enable focus mode for 1 hour via API
 	if err := m.apiClient.SetFocusMode(true, "1h"); err != nil {
 		return fmt.Errorf("failed to enable focus mode: %w", err)
@@ -317,7 +289,7 @@ func (m Model) enableFocusMode() error {
 	return nil
 }
 
-func (m Model) updateFocusModeStatus() {
+func (m *Model) updateFocusModeStatus() {
 	// Get focus mode state from API
 	if focusState, err := m.apiClient.GetFocusMode(); err == nil {
 		// Update focus mode state from API response
@@ -879,55 +851,57 @@ Use the Monitoring tab to see which domains are being accessed.`
 func formatAllowlistRow(domain string, domainType string, status string, isSelected bool, recentlyChanged bool) string {
 	row := fmt.Sprintf("%-40s %-20s %-10s", domain, domainType, status)
 
-	if isSelected && recentlyChanged {
+	switch {
+	case isSelected && recentlyChanged:
 		// Combined state: selected and recently changed - use a distinct color
 		return lipgloss.NewStyle().
 			Background(lipgloss.Color("#059669")). // Green background for selected + recently changed
 			Foreground(lipgloss.Color("#FFFFFF")). // White text
 			Padding(0, 1).
 			Render(row)
-	} else if isSelected {
+	case isSelected:
 		return lipgloss.NewStyle().
 			Background(lipgloss.Color("#3B82F6")). // Blue background for selected
 			Foreground(lipgloss.Color("#FFFFFF")). // White text
 			Padding(0, 1).
 			Render(row)
-	} else if recentlyChanged {
+	case recentlyChanged:
 		return lipgloss.NewStyle().
 			Background(lipgloss.Color("#8B5CF6")). // Purple background for recently changed
 			Foreground(lipgloss.Color("#FFFFFF")). // White text
 			Padding(0, 1).
 			Render(row)
+	default:
+		return row
 	}
-
-	return row
 }
 
 func formatTableRow(domain string, timestamp time.Time, status string, isSelected bool, recentlyChanged bool) string {
 	row := fmt.Sprintf("%-40s %-20s %-10s", domain, timestamp.Format("15:04:05"), status)
 
-	if isSelected && recentlyChanged {
+	switch {
+	case isSelected && recentlyChanged:
 		// Combined state: selected and recently changed - use a distinct color
 		return lipgloss.NewStyle().
 			Background(lipgloss.Color("#059669")). // Green background for selected + recently changed
 			Foreground(lipgloss.Color("#FFFFFF")). // White text
 			Padding(0, 1).
 			Render(row)
-	} else if isSelected {
+	case isSelected:
 		return lipgloss.NewStyle().
 			Background(lipgloss.Color("#3B82F6")). // Blue background for selected
 			Foreground(lipgloss.Color("#FFFFFF")). // White text
 			Padding(0, 1).
 			Render(row)
-	} else if recentlyChanged {
+	case recentlyChanged:
 		return lipgloss.NewStyle().
 			Background(lipgloss.Color("#8B5CF6")). // Purple background for recently changed
 			Foreground(lipgloss.Color("#FFFFFF")). // White text
 			Padding(0, 1).
 			Render(row)
+	default:
+		return row
 	}
-
-	return row
 }
 
 func (m *Model) addToAllowlist(domain string) error {

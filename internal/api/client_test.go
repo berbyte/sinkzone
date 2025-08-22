@@ -7,9 +7,6 @@ import (
 
 func TestNewClient(t *testing.T) {
 	client := NewClient("http://127.0.0.1:8080")
-	if client == nil {
-		t.Fatal("NewClient returned nil")
-	}
 	if client.baseURL != "http://127.0.0.1:8080" {
 		t.Errorf("Expected baseURL to be 'http://127.0.0.1:8080', got '%s'", client.baseURL)
 	}
