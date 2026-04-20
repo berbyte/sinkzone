@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -68,6 +69,25 @@ func NewServerWithPort(cfg *config.Config, apiServer *api.Server, port string) *
 		allowlist:     make(map[string]bool),
 		port:          port,
 	}
+}
+
+func resolveHost(addr string) string {
+	// Extract host part from "ip:port"
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		// addr might just be an IP without port
+		host = addr
+	}
+
+	// Do reverse DNS lookup
+	names, err := net.LookupAddr(host)
+	if err != nil || len(names) == 0 {
+		return host // fallback to IP
+	}
+
+	// Remove trailing dot from hostname
+	hostname := strings.TrimSuffix(names[0], ".")
+	return hostname
 }
 
 // wildcardToRegex converts a wildcard pattern to a regex pattern
@@ -325,7 +345,9 @@ func (s *Server) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 
 		// Add to API server if available
 		if s.apiServer != nil {
+			clientHostname := resolveHost(w.RemoteAddr().String())
 			query := api.DNSQuery{
+				Client:    clientHostname,
 				Domain:    domain,
 				Timestamp: time.Now(),
 				Blocked:   blocked,

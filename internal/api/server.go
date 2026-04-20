@@ -13,6 +13,7 @@ import (
 )
 
 type DNSQuery struct {
+	Client    string    `json:"client"`
 	Domain    string    `json:"domain"`
 	Timestamp time.Time `json:"timestamp"`
 	Blocked   bool      `json:"blocked"`
