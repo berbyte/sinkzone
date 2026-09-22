@@ -767,8 +767,8 @@ Make sure the resolver is running with 'sinkzone resolver'`
 	}
 
 	// Header
-	header := fmt.Sprintf("%-40s %-20s %-10s\n", "Domain", "Time", "Status")
-	header += strings.Repeat("-", 70) + "\n"
+	header := fmt.Sprintf("%-40s %-27s %-20s %-10s\n", "Domain", "Client", "Time", "Status")
+	header += strings.Repeat("-", 97) + "\n"
 
 	// Table rows
 	var rows []string
@@ -786,12 +786,18 @@ Make sure the resolver is running with 'sinkzone resolver'`
 			domain = domain[:35] + "..."
 		}
 
+		// Truncate hostname if too long
+		dnsClient := query.Client
+		if len(dnsClient) > 25 {
+			dnsClient = dnsClient[:22] + "..."
+		}
+
 		// Check if this row is selected
 		// Since we display newest first (reversed), map cursor position
 		isSelected := i == m.monitoring.tableCursor
 		recentlyChanged := query.Domain == m.lastChangedDomain && time.Since(m.lastChangeTime) < 2*time.Second
 
-		row := formatTableRow(domain, query.Timestamp, status, isSelected, recentlyChanged)
+		row := formatTableRow(domain, dnsClient, query.Timestamp, status, isSelected, recentlyChanged)
 		rows = append(rows, row)
 	}
 
@@ -876,8 +882,8 @@ func formatAllowlistRow(domain string, domainType string, status string, isSelec
 	}
 }
 
-func formatTableRow(domain string, timestamp time.Time, status string, isSelected bool, recentlyChanged bool) string {
-	row := fmt.Sprintf("%-40s %-20s %-10s", domain, timestamp.Format("15:04:05"), status)
+func formatTableRow(domain string, dnsClient string, timestamp time.Time, status string, isSelected bool, recentlyChanged bool) string {
+	row := fmt.Sprintf("%-40s %-27s %-20s %-10s", domain, dnsClient, timestamp.Format("15:04:05"), status)
 
 	switch {
 	case isSelected && recentlyChanged:
